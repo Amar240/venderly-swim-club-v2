@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StaffRole {
+  STAFF
+  ADMIN
+}
+
+enum MemberStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum AttendanceAction {
+  CHECK_IN
+  SIGN_OUT
+}
+
+enum GuestPassStatus {
+  AVAILABLE
+  USED
+  EXPIRED
+}
+
+enum SignupStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model StaffUser {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         StaffRole @default(STAFF)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Member {
+  id             String          @id @default(uuid())
+  firstName      String
+  lastName       String
+  email          String?         @unique
+  phone          String?
+  membershipCode String?         @unique
+  status         MemberStatus    @default(ACTIVE)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  attendanceLogs AttendanceLog[]
+  guestPasses    GuestPass[]
+}
+
+model AttendanceLog {
+  id        String           @id @default(uuid())
+  memberId  String
+  action    AttendanceAction
+  createdAt DateTime         @default(now())
+  notes     String?
+  member    Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId, createdAt])
+}
+
+model GuestPass {
+  id        String          @id @default(uuid())
+  memberId  String
+  code      String          @unique
+  status    GuestPassStatus @default(AVAILABLE)
+  expiresAt DateTime?
+  usedAt    DateTime?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  member    Member          @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId, status])
+}
+
+model SignupRequest {
+  id        String       @id @default(uuid())
+  firstName String
+  lastName  String
+  email     String
+  phone     String?
+  status    SignupStatus @default(PENDING)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([email, status])
+}
