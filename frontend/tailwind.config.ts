@@ -12,6 +12,17 @@ const config = {
         sm: "calc(var(--radius) - 4px)"
       },
       colors: {
+        brand: {
+          primary: "#2196F3",
+          primaryHover: "#1E88E5",
+          navy: "#0F1B2D",
+          background: "#F0F7FA",
+          surface: "#FFFFFF",
+          success: "#2E7D32",
+          warning: "#F9A825",
+          danger: "#D32F2F",
+          border: "#EEEEEE"
+        },
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         card: {

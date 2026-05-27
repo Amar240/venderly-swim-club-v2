@@ -1,7 +1,8 @@
 import { Router } from "express";
+import { goodbyeHandler, signedUpHandler, welcomeHandler } from "../handlers/memberPages";
 import { adminRouter } from "./admin";
 import { authRouter } from "./auth";
-import { dashboardRouter } from "./dashboard";
+import { apiV1Router } from "./apiV1";
 import { webhooksRouter } from "./webhooks";
 
 export const routes = Router();
@@ -17,7 +18,11 @@ routes.get("/health", (_req, res) => {
   });
 });
 
+routes.get("/welcome", welcomeHandler);
+routes.get("/goodbye", goodbyeHandler);
+routes.get("/signed-up", signedUpHandler);
+
+routes.use("/api/v1", apiV1Router);
 routes.use("/webhooks", webhooksRouter);
-routes.use("/dashboard", dashboardRouter);
 routes.use("/auth", authRouter);
 routes.use("/admin", adminRouter);
