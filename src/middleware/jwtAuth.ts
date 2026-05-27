@@ -6,6 +6,7 @@ import type { AuthenticatedStaff, JwtPayload } from "../types";
 
 const jwtPayloadSchema = z.object({
   sub: z.string().min(1),
+  clubId: z.string().min(1),
   email: z.string().email(),
   role: z.enum(["STAFF", "ADMIN"])
 });
@@ -38,6 +39,7 @@ export const jwtAuth: RequestHandler = (req, res, next) => {
 
   staffResponse.locals.staff = {
     id: payload.sub,
+    clubId: payload.clubId,
     email: payload.email,
     role: payload.role
   };

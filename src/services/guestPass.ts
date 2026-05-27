@@ -1,28 +1,39 @@
-import { GuestPassStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import type { GuestPassValidationResult } from "../types";
 
-export const validateGuestPass = async (code: string): Promise<GuestPassValidationResult> => {
-  const guestPass = await prisma.guestPass.findUnique({
-    where: { code },
+export const validateGuestPass = async (clubId: string, code: string): Promise<GuestPassValidationResult> => {
+  const guestPassPurchase = await prisma.guestPassPurchase.findUnique({
+    where: {
+      clubId_code: {
+        clubId,
+        code
+      }
+    },
     select: {
       id: true,
-      status: true,
+      quantityPurchased: true,
+      quantityUsed: true,
       expiresAt: true
     }
   });
 
-  if (!guestPass) {
+  if (!guestPassPurchase) {
     return { valid: false, reason: "Guest pass was not found" };
   }
 
-  if (guestPass.status !== GuestPassStatus.AVAILABLE) {
-    return { valid: false, reason: `Guest pass is ${guestPass.status.toLowerCase()}` };
+  const remainingUses = guestPassPurchase.quantityPurchased - guestPassPurchase.quantityUsed;
+
+  if (remainingUses <= 0) {
+    return { valid: false, reason: "Guest pass has no remaining uses", remainingUses: 0 };
   }
 
-  if (guestPass.expiresAt && guestPass.expiresAt < new Date()) {
-    return { valid: false, reason: "Guest pass is expired" };
+  if (guestPassPurchase.expiresAt && guestPassPurchase.expiresAt < new Date()) {
+    return { valid: false, reason: "Guest pass is expired", remainingUses };
   }
 
-  return { valid: true, guestPassId: guestPass.id };
+  return {
+    valid: true,
+    guestPassPurchaseId: guestPassPurchase.id,
+    remainingUses
+  };
 };

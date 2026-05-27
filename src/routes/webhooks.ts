@@ -4,6 +4,7 @@ import { checkInHandler } from "../handlers/checkin";
 import { signOutHandler } from "../handlers/signout";
 import { signupHandler } from "../handlers/signup";
 import { webhookAuth } from "../middleware/webhookAuth";
+import { resolveClubIdFromGhlPayload } from "../services/clubResolver";
 import type { GhlWebhookPayload } from "../types";
 
 const ghlWebhookSchema = z.object({
@@ -19,9 +20,10 @@ webhooksRouter.post("/ghl/checkin", checkInHandler);
 webhooksRouter.post("/ghl/signout", signOutHandler);
 webhooksRouter.post("/ghl/signup", signupHandler);
 
-webhooksRouter.post("/ghl", (req, res, next) => {
+webhooksRouter.post("/ghl", async (req, res, next) => {
   try {
     const parsedPayload = ghlWebhookSchema.parse(req.body);
+    const clubId = await resolveClubIdFromGhlPayload(parsedPayload);
     const payload: GhlWebhookPayload = {
       eventType: parsedPayload.eventType,
       contactId: parsedPayload.contactId,
@@ -32,6 +34,7 @@ webhooksRouter.post("/ghl", (req, res, next) => {
       status: "ok",
       data: {
         message: "GHL webhook placeholder accepted",
+        clubId,
         payload
       }
     });

@@ -13,35 +13,43 @@ export interface ApiResponse<TData extends Record<string, unknown> = Record<stri
 
 export interface AuthenticatedStaff {
   id: string;
+  clubId: string;
   email: string;
   role: StaffRole;
 }
 
 export interface JwtPayload {
   sub: string;
+  clubId: string;
   email: string;
   role: StaffRole;
 }
 
-export interface MemberLookupInput {
+export interface PersonLookupInput {
+  clubId: string;
+  personId?: string;
   membershipCode?: string;
   email?: string;
   phone?: string;
 }
 
-export interface MemberLookupResult {
+export interface PersonLookupResult {
   found: boolean;
-  memberId?: string;
-  matchedBy?: "membershipCode" | "email" | "phone";
+  ambiguous?: boolean;
+  personId?: string;
+  membershipId?: string;
+  matchedBy?: "personId" | "membershipCode" | "email" | "phone";
 }
 
 export interface GuestPassValidationResult {
   valid: boolean;
   reason?: string;
-  guestPassId?: string;
+  guestPassPurchaseId?: string;
+  remainingUses?: number;
 }
 
 export interface CapacityResult {
+  clubId: string;
   allowed: boolean;
   currentOccupancy: number;
   maxCapacity: number;

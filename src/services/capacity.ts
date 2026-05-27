@@ -1,23 +1,31 @@
-import { AttendanceAction } from "@prisma/client";
 import { prisma } from "../lib/prisma";
+import { HttpError } from "../middleware/errorHandler";
 import type { CapacityResult } from "../types";
 
-const DEFAULT_MAX_CAPACITY = 100;
-
-export const checkPoolCapacity = async (maxCapacity = DEFAULT_MAX_CAPACITY): Promise<CapacityResult> => {
-  const checkIns = await prisma.attendanceLog.count({
-    where: { action: AttendanceAction.CHECK_IN }
+export const checkPoolCapacity = async (clubId: string): Promise<CapacityResult> => {
+  const club = await prisma.club.findUnique({
+    where: { id: clubId },
+    select: {
+      id: true,
+      maxCapacity: true
+    }
   });
 
-  const signOuts = await prisma.attendanceLog.count({
-    where: { action: AttendanceAction.SIGN_OUT }
-  });
+  if (!club) {
+    throw new HttpError(404, "CLUB_NOT_FOUND", "Club was not found");
+  }
 
-  const currentOccupancy = Math.max(checkIns - signOuts, 0);
+  const currentOccupancy = await prisma.checkinEvent.count({
+    where: {
+      clubId,
+      isActive: true
+    }
+  });
 
   return {
-    allowed: currentOccupancy < maxCapacity,
+    clubId: club.id,
+    allowed: currentOccupancy < club.maxCapacity,
     currentOccupancy,
-    maxCapacity
+    maxCapacity: club.maxCapacity
   };
 };

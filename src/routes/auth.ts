@@ -21,10 +21,11 @@ authRouter.post("/login", async (req, res, next) => {
     }
 
     const { email, password } = loginSchema.parse(req.body);
-    const staffUser = await prisma.staffUser.findUnique({
+    const staff = await prisma.staff.findUnique({
       where: { email },
       select: {
         id: true,
+        clubId: true,
         email: true,
         passwordHash: true,
         name: true,
@@ -33,11 +34,11 @@ authRouter.post("/login", async (req, res, next) => {
       }
     });
 
-    if (!staffUser || !staffUser.isActive) {
+    if (!staff || !staff.isActive) {
       throw new HttpError(401, "INVALID_CREDENTIALS", "Invalid email or password");
     }
 
-    const passwordMatches = await bcrypt.compare(password, staffUser.passwordHash);
+    const passwordMatches = await bcrypt.compare(password, staff.passwordHash);
 
     if (!passwordMatches) {
       throw new HttpError(401, "INVALID_CREDENTIALS", "Invalid email or password");
@@ -45,9 +46,10 @@ authRouter.post("/login", async (req, res, next) => {
 
     const token = jwt.sign(
       {
-        sub: staffUser.id,
-        email: staffUser.email,
-        role: staffUser.role
+        sub: staff.id,
+        clubId: staff.clubId,
+        email: staff.email,
+        role: staff.role
       },
       jwtSecret,
       { expiresIn: "8h" }
@@ -58,10 +60,11 @@ authRouter.post("/login", async (req, res, next) => {
       data: {
         token,
         staff: {
-          id: staffUser.id,
-          email: staffUser.email,
-          name: staffUser.name,
-          role: staffUser.role
+          id: staff.id,
+          clubId: staff.clubId,
+          email: staff.email,
+          name: staff.name,
+          role: staff.role
         }
       }
     });

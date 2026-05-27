@@ -19,7 +19,8 @@ adminRouter.get("/operations", (_req, res) => {
   res.json({
     status: "ok",
     data: {
-      message: "Admin operations placeholder"
+      message: "Admin operations placeholder",
+      clubId: res.locals.staff.clubId
     }
   });
 });

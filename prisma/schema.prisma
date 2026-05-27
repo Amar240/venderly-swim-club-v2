@@ -12,88 +12,144 @@ enum StaffRole {
   ADMIN
 }
 
-enum MemberStatus {
+enum MembershipStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  EXPIRED
+}
+
+enum PersonStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
 }
 
-enum AttendanceAction {
-  CHECK_IN
-  SIGN_OUT
+model Club {
+  id                 String              @id @default(uuid())
+  name               String
+  slug               String              @unique
+  ghlLocationId      String?             @unique @map("ghl_location_id")
+  maxCapacity        Int                 @default(100) @map("max_capacity")
+  isActive           Boolean             @default(true) @map("is_active")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  staff              Staff[]
+  memberships        Membership[]
+  persons            Person[]
+  checkinEvents      CheckinEvent[]
+  guestPassPurchases GuestPassPurchase[]
+
+  @@map("clubs")
 }
 
-enum GuestPassStatus {
-  AVAILABLE
-  USED
-  EXPIRED
+model Staff {
+  id             String         @id @default(uuid())
+  clubId         String         @map("club_id")
+  email          String         @unique
+  passwordHash   String         @map("password_hash")
+  name           String
+  role           StaffRole      @default(STAFF)
+  isActive       Boolean        @default(true) @map("is_active")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  club           Club           @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  checkinEvents  CheckinEvent[]
+
+  @@index([clubId])
+  @@map("staff")
 }
 
-enum SignupStatus {
-  PENDING
-  APPROVED
-  REJECTED
+model Membership {
+  id                 String              @id @default(uuid())
+  clubId             String              @map("club_id")
+  membershipCode     String?             @map("membership_code")
+  externalMembershipId String?           @map("external_membership_id")
+  externalCustomerId String?             @map("external_customer_id")
+  status             MembershipStatus    @default(ACTIVE)
+  startsAt           DateTime?           @map("starts_at")
+  endsAt             DateTime?           @map("ends_at")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  club               Club                @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  persons            Person[]
+  checkinEvents      CheckinEvent[]
+  guestPassPurchases GuestPassPurchase[]
+
+  @@unique([clubId, membershipCode])
+  @@unique([clubId, externalMembershipId])
+  @@index([clubId, status])
+  @@map("memberships")
 }
 
-model StaffUser {
-  id           String    @id @default(uuid())
-  email        String    @unique
-  passwordHash String
-  name         String
-  role         StaffRole @default(STAFF)
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+model Person {
+  id                 String              @id @default(uuid())
+  clubId             String              @map("club_id")
+  membershipId       String              @map("membership_id")
+  firstName          String              @map("first_name")
+  lastName           String              @map("last_name")
+  email              String?
+  phone              String?
+  ghlContactId       String?             @map("ghl_contact_id")
+  isPrimary          Boolean             @default(false) @map("is_primary")
+  status             PersonStatus        @default(ACTIVE)
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  club               Club                @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  membership         Membership          @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  checkinEvents      CheckinEvent[]
+  guestPassPurchases GuestPassPurchase[]
+
+  @@unique([clubId, ghlContactId])
+  @@index([clubId, email])
+  @@index([clubId, phone])
+  @@index([clubId, membershipId])
+  @@map("persons")
 }
 
-model Member {
-  id             String          @id @default(uuid())
-  firstName      String
-  lastName       String
-  email          String?         @unique
-  phone          String?
-  membershipCode String?         @unique
-  status         MemberStatus    @default(ACTIVE)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  attendanceLogs AttendanceLog[]
-  guestPasses    GuestPass[]
+model CheckinEvent {
+  id                  String             @id @default(uuid())
+  clubId              String             @map("club_id")
+  personId            String             @map("person_id")
+  membershipId        String?            @map("membership_id")
+  guestPassPurchaseId String?            @map("guest_pass_purchase_id")
+  staffId             String?            @map("staff_id")
+  isActive            Boolean            @default(true) @map("is_active")
+  checkedInAt         DateTime           @default(now()) @map("checked_in_at")
+  signedOutAt         DateTime?          @map("signed_out_at")
+  notes               String?
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+  club                Club               @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  person              Person             @relation(fields: [personId], references: [id], onDelete: Cascade)
+  membership          Membership?        @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+  guestPassPurchase   GuestPassPurchase? @relation(fields: [guestPassPurchaseId], references: [id], onDelete: SetNull)
+  staff               Staff?             @relation(fields: [staffId], references: [id], onDelete: SetNull)
+
+  @@index([clubId, isActive])
+  @@index([personId, checkedInAt])
+  @@map("checkin_events")
 }
 
-model AttendanceLog {
-  id        String           @id @default(uuid())
-  memberId  String
-  action    AttendanceAction
-  createdAt DateTime         @default(now())
-  notes     String?
-  member    Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+model GuestPassPurchase {
+  id                String         @id @default(uuid())
+  clubId            String         @map("club_id")
+  membershipId      String?        @map("membership_id")
+  personId          String?        @map("person_id")
+  code              String
+  quantityPurchased Int            @default(1) @map("quantity_purchased")
+  quantityUsed      Int            @default(0) @map("quantity_used")
+  expiresAt         DateTime?      @map("expires_at")
+  purchasedAt       DateTime       @default(now()) @map("purchased_at")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  club              Club           @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  membership        Membership?    @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+  person            Person?        @relation(fields: [personId], references: [id], onDelete: SetNull)
+  checkinEvents     CheckinEvent[]
 
-  @@index([memberId, createdAt])
-}
-
-model GuestPass {
-  id        String          @id @default(uuid())
-  memberId  String
-  code      String          @unique
-  status    GuestPassStatus @default(AVAILABLE)
-  expiresAt DateTime?
-  usedAt    DateTime?
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
-  member    Member          @relation(fields: [memberId], references: [id], onDelete: Cascade)
-
-  @@index([memberId, status])
-}
-
-model SignupRequest {
-  id        String       @id @default(uuid())
-  firstName String
-  lastName  String
-  email     String
-  phone     String?
-  status    SignupStatus @default(PENDING)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-
-  @@index([email, status])
+  @@unique([clubId, code])
+  @@index([clubId, membershipId])
+  @@index([clubId, personId])
+  @@map("guest_pass_purchases")
 }
