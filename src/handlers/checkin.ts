@@ -10,7 +10,9 @@ const checkInWebhookSchema = z
       .object({
         id: z.string().min(1)
       })
-      .passthrough(),
+      .passthrough()
+      .optional(),
+    location_id: z.string().min(1).optional(),
     contact_id: z.string().optional(),
     first_name: z.string().min(1),
     last_name: z.string().optional().default(""),
@@ -19,7 +21,7 @@ const checkInWebhookSchema = z
     "Membership Name": z.string().optional(),
     "Number of members attending": z.string().optional(),
     "Any guests?": z.string().optional(),
-    "Select Option:": z.string().min(1)
+    "Select Option:": z.string().optional().default("Sign-In")
   })
   .catchall(z.unknown());
 
@@ -341,9 +343,16 @@ export const checkInHandler: RequestHandler = async (req, res, next) => {
     }
 
     const input = checkInWebhookSchema.parse(req.body);
+    const locationId = input.location?.id ?? input.location_id;
+
+    if (!locationId) {
+      res.status(422).json({ valid: false, message: "Club not found" });
+      return;
+    }
+
     const club = await prisma.club.findFirst({
       where: {
-        ghlLocationId: input.location.id,
+        ghlLocationId: locationId,
         isActive: true
       },
       select: { id: true }
