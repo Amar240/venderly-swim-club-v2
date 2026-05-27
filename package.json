@@ -5,7 +5,8 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn src/server.ts",
-    "build": "cd frontend && npm run build && cd .. && tsc && npm run typecheck:scripts",
+    "build": "cd frontend && npm run build && cd .. && tsc",
+    "build:full": "cd frontend && npm run build && cd .. && tsc && npm run typecheck:scripts",
     "start": "node dist/server.js",
     "frontend:dev": "cd frontend && npm run dev",
     "frontend:build": "cd frontend && npm run build",

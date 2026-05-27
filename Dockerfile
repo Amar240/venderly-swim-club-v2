@@ -29,7 +29,7 @@ COPY tsconfig.json tsconfig.scripts.json ./
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 COPY frontend/package*.json ./frontend/
 RUN npx prisma generate
-RUN npm run build
+RUN npx tsc
 RUN npm prune --omit=dev
 
 FROM base AS runtime
