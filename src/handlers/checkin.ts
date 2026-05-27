@@ -11,9 +11,9 @@ const checkInWebhookSchema = z
         id: z.string().min(1)
       })
       .passthrough(),
-    contact_id: z.string().min(1),
+    contact_id: z.string().optional(),
     first_name: z.string().min(1),
-    last_name: z.string().min(1),
+    last_name: z.string().optional().default(""),
     email: z.string().email(),
     phone: z.string().optional(),
     "Membership Name": z.string().optional(),
