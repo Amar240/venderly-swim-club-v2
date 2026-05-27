@@ -1,0 +1,14 @@
+version: 1.0
+runtime: docker
+build:
+  commands:
+    pre-build:
+      - echo "Building from Dockerfile"
+run:
+  command: node dist/server.js
+  network:
+    port: 3000
+    env: PORT
+  env:
+    - name: NODE_ENV
+      value: production
