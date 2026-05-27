@@ -70,8 +70,8 @@ const parseGuestCount = (rawGuests: string | undefined): number => {
   return match ? Number.parseInt(match[0], 10) : 0;
 };
 
-const findPersonByEmail = async (clubId: string, email: string): Promise<FoundPerson | null> =>
-  prisma.person.findFirst({
+const findPersonByEmail = async (clubId: string, email: string, firstName: string): Promise<FoundPerson | null> => {
+  const emailMatch = await prisma.person.findFirst({
     where: {
       clubId,
       email,
@@ -102,6 +102,52 @@ const findPersonByEmail = async (clubId: string, email: string): Promise<FoundPe
       }
     }
   });
+
+  if (!emailMatch) {
+    return null;
+  }
+
+  const matchingMembershipPerson = emailMatch.membership.persons.find(
+    (person) => normalizeName(person.firstName) === normalizeName(firstName)
+  );
+
+  if (!matchingMembershipPerson || matchingMembershipPerson.id === emailMatch.id) {
+    return emailMatch;
+  }
+
+  const matchingPerson = await prisma.person.findFirst({
+    where: {
+      id: matchingMembershipPerson.id,
+      clubId,
+      membership: { status: "ACTIVE" }
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+      membershipId: true,
+      membership: {
+        select: {
+          id: true,
+          tier: true,
+          maxMembers: true,
+          persons: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true
+            },
+            orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }]
+          }
+        }
+      }
+    }
+  });
+
+  return matchingPerson ?? emailMatch;
+};
 
 const findPersonByPhone = async (clubId: string, phone: string | undefined): Promise<FoundPerson | null> => {
   if (!phone) {
@@ -234,7 +280,7 @@ const findPersonByMembershipName = async (
 };
 
 const findMemberForCheckIn = async (clubId: string, input: CheckInWebhookPayload): Promise<FoundPerson | null> => {
-  const emailMatch = await findPersonByEmail(clubId, input.email);
+  const emailMatch = await findPersonByEmail(clubId, input.email, input.first_name);
 
   if (emailMatch) {
     return emailMatch;

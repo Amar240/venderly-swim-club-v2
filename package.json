@@ -5,8 +5,10 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn src/server.ts",
-    "build": "tsc",
+    "build": "tsc && npm run typecheck:scripts",
     "start": "node dist/server.js",
+    "import:members": "ts-node scripts/importMembers.ts",
+    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio"
@@ -28,6 +30,7 @@
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.10.5",
     "prisma": "^5.22.0",
+    "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.7.2"
   },
