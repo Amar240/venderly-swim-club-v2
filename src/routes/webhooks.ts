@@ -27,11 +27,12 @@ webhooksRouter.post("/debug", (req, res) => {
   });
 });
 
+webhooksRouter.post("/ghl/signup", signupHandler);
+
 webhooksRouter.use(webhookAuth);
 
 webhooksRouter.post("/ghl/checkin", checkInHandler);
 webhooksRouter.post("/ghl/signout", signOutHandler);
-webhooksRouter.post("/ghl/signup", signupHandler);
 
 webhooksRouter.post("/ghl", async (req, res, next) => {
   try {

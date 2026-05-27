@@ -70,6 +70,7 @@ model Membership {
   maxMembers             Int                 @default(1) @map("max_members")
   paymentAmountCents     Int                 @default(0) @map("payment_amount_cents")
   paymentStatus          String              @default("paid") @map("payment_status")
+  paymentData            Json?               @map("payment_data")
   stripePaymentIntentId  String?             @map("stripe_payment_intent_id")
   stripeSetupIntentId    String?             @map("stripe_setup_intent_id")
   guestPassesTotal       Int                 @default(0) @map("guest_passes_total")
