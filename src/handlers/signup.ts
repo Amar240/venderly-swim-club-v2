@@ -1,6 +1,7 @@
 import type { RequestHandler } from "express";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { calculateInitialGuestPasses } from "../lib/guestPasses";
 import { logger } from "../lib/logger";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../middleware/errorHandler";
@@ -186,6 +187,7 @@ export const signupHandler: RequestHandler = async (req, res, next) => {
     const allergies = getStringField(input, "Do you require any special accommodations? If so, please describe:");
     const paymentData = input.triggerData as Prisma.InputJsonObject | undefined;
     const paymentStatus = getPaymentStatus(input.triggerData);
+    const guestPassesTotal = calculateInitialGuestPasses(now);
 
     const result = await prisma.$transaction(async (transaction) => {
       const existingMembership = await transaction.membership.findFirst({
@@ -206,9 +208,10 @@ export const signupHandler: RequestHandler = async (req, res, next) => {
               paymentData,
               ghlContactId: input.contact_id,
               source: "ghl_signup",
+              submittedAt: now,
               startsAt: now,
               endsAt,
-              guestPassesTotal: 0
+              guestPassesTotal
             },
             select: { id: true }
           })
@@ -221,9 +224,10 @@ export const signupHandler: RequestHandler = async (req, res, next) => {
               paymentData,
               ghlContactId: input.contact_id,
               source: "ghl_signup",
+              submittedAt: now,
               startsAt: now,
               endsAt,
-              guestPassesTotal: 0
+              guestPassesTotal
             },
             select: { id: true }
           });

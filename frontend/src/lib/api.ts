@@ -146,6 +146,7 @@ export interface MemberDetail {
   allergies: string;
   emergencyContactName: string;
   emergencyContactPhone: string;
+  emergencyContactEmail: string;
   notes: string;
   isPrimary: boolean;
   personStatus: string;
@@ -156,6 +157,15 @@ export interface MemberDetail {
     status: string;
     startsAt: string | null;
     endsAt: string | null;
+    addressStreet: string;
+    addressCity: string;
+    addressState: string;
+    addressPostalCode: string;
+    addressCountry: string;
+    submittedAt: string | null;
+    externalOrderId: string;
+    emailVerified: boolean;
+    phoneVerified: boolean;
     guestPassesTotal: number;
     guestPassesUsed: number;
   };

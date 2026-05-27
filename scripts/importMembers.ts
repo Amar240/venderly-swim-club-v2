@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { readFile } from "node:fs/promises";
 import { PrismaClient } from "@prisma/client";
+import { calculateInitialGuestPasses } from "../src/lib/guestPasses";
 
 type CsvRow = Record<string, string>;
 
@@ -16,12 +17,45 @@ type ParsedName = {
 
 type ParsedMember = ParsedName & {
   fullName: string;
+  email?: string;
+  age?: number;
+  relationship: string;
 };
 
 type Summary = {
   importedMemberships: number;
   importedPersons: number;
   skipped: number;
+};
+
+type ImportOptions = {
+  dryRun: boolean;
+  upsert: boolean;
+};
+
+type MembershipImportData = {
+  clubId: string;
+  tier: string;
+  maxMembers: number;
+  paymentStatus: string;
+  paymentAmountCents: number;
+  source: string;
+  startsAt: Date;
+  endsAt: Date;
+  ghlContactId: string;
+  addressStreet: string | null;
+  addressCity: string | null;
+  addressState: string | null;
+  addressPostalCode: string | null;
+  addressCountry: string | null;
+  submittedAt: Date | null;
+  externalOrderId: string | null;
+  signupIp: string | null;
+  signupTimezone: string | null;
+  signupUrl: string | null;
+  emailVerified: boolean;
+  phoneVerified: boolean;
+  guestPassesTotal: number;
 };
 
 const prisma = new PrismaClient();
@@ -31,11 +65,12 @@ const SEASON_START = new Date("2026-05-24T00:00:00.000Z");
 const SEASON_END = new Date("2026-09-30T00:00:00.000Z");
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const parseArgs = (args: string[]): { dryRun: boolean; csvPath?: string } => {
+const parseArgs = (args: string[]): ImportOptions & { csvPath?: string } => {
   const dryRun = args.includes("--dry-run");
-  const csvPath = args.find((arg) => arg !== "--dry-run");
+  const upsert = args.includes("--upsert");
+  const csvPath = args.find((arg) => !arg.startsWith("--"));
 
-  return { dryRun, csvPath };
+  return { dryRun, upsert, csvPath };
 };
 
 const parseCsv = (content: string): CsvRow[] => {
@@ -100,6 +135,92 @@ const parseCsv = (content: string): CsvRow[] => {
 
 const getField = (row: CsvRow, fieldName: string): string => row[fieldName]?.trim() ?? "";
 
+const trimOrNull = (raw: string | undefined): string | null => {
+  const trimmed = raw?.trim();
+  return trimmed ? trimmed : null;
+};
+
+const parseGhlDate = (raw: string): Date | null => {
+  if (!raw.trim()) {
+    return null;
+  }
+
+  try {
+    const cleaned = raw.trim().replace(/(\d+)(st|nd|rd|th)/gi, "$1");
+    const parsed = new Date(cleaned);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  } catch {
+    return null;
+  }
+};
+
+const parseBool = (raw: string): boolean => ["true", "yes", "1"].includes(raw.trim().toLowerCase());
+
+const splitMultivalue = (raw: string): string[] =>
+  raw
+    .split(/[,\n]/)
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+const parseName = (fullName: string): ParsedName => {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  const [firstName = "", ...lastNameParts] = parts;
+
+  return {
+    firstName,
+    lastName: lastNameParts.join(" ")
+  };
+};
+
+const normalizeName = (name: string): string => name.trim().replace(/\s+/g, " ").toLowerCase();
+
+const normalizeFirstName = (name: string): string => parseName(name).firstName.toLowerCase();
+
+const parseChildrenAges = (raw: string): Map<string, number> => {
+  const ages = new Map<string, number>();
+  const pattern = /([A-Za-z][A-Za-z .'-]*?)\s*\((\d{1,2})\)/g;
+
+  for (const match of raw.matchAll(pattern)) {
+    const name = match[1]?.trim();
+    const age = Number.parseInt(match[2] ?? "", 10);
+    const key = name ? normalizeFirstName(name) : "";
+
+    if (key && !Number.isNaN(age)) {
+      ages.set(key, age);
+    }
+  }
+
+  return ages;
+};
+
+const parseRelationships = (raw: string): Map<string, string> => {
+  const relationships = new Map<string, string>();
+
+  for (const segment of splitMultivalue(raw)) {
+    const [relationshipRaw, namesRaw] = segment.split(":");
+
+    if (!relationshipRaw || !namesRaw) {
+      continue;
+    }
+
+    const relationship = relationshipRaw.trim().toLowerCase().replace(/\s+/g, "_");
+    const names = namesRaw
+      .split(/\band\b|&|\//i)
+      .map((name) => name.trim())
+      .filter((name) => name.length > 0);
+
+    for (const name of names) {
+      const key = normalizeFirstName(name);
+
+      if (key) {
+        relationships.set(key, relationship);
+      }
+    }
+  }
+
+  return relationships;
+};
+
 const cleanPhoneNumber = (rawPhone: string): string | undefined => {
   const firstPhone = rawPhone
     .split(/[,\n;|]/)
@@ -114,18 +235,6 @@ const cleanPhoneNumber = (rawPhone: string): string | undefined => {
   const normalized = digits.slice(-10);
   return normalized.length === 10 ? normalized : undefined;
 };
-
-const parseName = (fullName: string): ParsedName => {
-  const parts = fullName.trim().split(/\s+/).filter(Boolean);
-  const [firstName = "", ...lastNameParts] = parts;
-
-  return {
-    firstName,
-    lastName: lastNameParts.join(" ")
-  };
-};
-
-const normalizeName = (name: string): string => name.trim().replace(/\s+/g, " ").toLowerCase();
 
 const parsePaymentAmountCents = (amount: string): number => {
   const numeric = amount.replace(/[^0-9.]/g, "");
@@ -172,6 +281,9 @@ const mapPaymentToTier = (paymentAmountCents: number): TierMapping => {
 const parseFamilyMembers = (row: CsvRow, accountHolderName: string): ParsedMember[] => {
   const accountHolderNormalizedName = normalizeName(accountHolderName);
   const familyMembers: ParsedMember[] = [];
+  const emails = splitMultivalue(getField(row, "Email addresses for all people on membership:"));
+  const childAges = parseChildrenAges(getField(row, "Include name(s) & age(s) of your child/children:"));
+  const relationships = parseRelationships(getField(row, "All names and family relationships"));
 
   for (let index = 1; index <= 8; index += 1) {
     const fullName = getField(row, `Member ${index}`);
@@ -186,9 +298,14 @@ const parseFamilyMembers = (row: CsvRow, accountHolderName: string): ParsedMembe
       continue;
     }
 
+    const firstNameKey = normalizeFirstName(fullName);
+
     familyMembers.push({
       ...parsedName,
-      fullName
+      fullName,
+      email: emails[familyMembers.length],
+      age: childAges.get(firstNameKey),
+      relationship: relationships.get(firstNameKey) ?? "family_member"
     });
   }
 
@@ -198,7 +315,33 @@ const parseFamilyMembers = (row: CsvRow, accountHolderName: string): ParsedMembe
 const formatFamilyNames = (familyMembers: ParsedMember[]): string =>
   familyMembers.map((member) => member.firstName).join(", ");
 
-const importRow = async (row: CsvRow, clubId: string, dryRun: boolean): Promise<Summary> => {
+const findExistingMembership = async (clubId: string, email: string, externalOrderId: string | null): Promise<{ id: string } | null> => {
+  if (externalOrderId) {
+    const byOrderId = await prisma.membership.findUnique({
+      where: {
+        clubId_externalOrderId: {
+          clubId,
+          externalOrderId
+        }
+      },
+      select: { id: true }
+    });
+
+    if (byOrderId) {
+      return byOrderId;
+    }
+  }
+
+  return prisma.membership.findFirst({
+    where: {
+      clubId,
+      ghlContactId: email
+    },
+    select: { id: true }
+  });
+};
+
+const importRow = async (row: CsvRow, clubId: string, options: ImportOptions): Promise<Summary> => {
   const accountHolderName = getField(row, "Your Full Name");
   const paymentStatus = getField(row, "Payment Status");
 
@@ -214,15 +357,11 @@ const importRow = async (row: CsvRow, clubId: string, dryRun: boolean): Promise<
     return { importedMemberships: 0, importedPersons: 0, skipped: 1 };
   }
 
-  const existingMembership = await prisma.membership.findFirst({
-    where: {
-      clubId,
-      ghlContactId: email
-    },
-    select: { id: true }
-  });
+  const submittedAt = parseGhlDate(getField(row, "Submission Date"));
+  const externalOrderId = trimOrNull(getField(row, "Order Id"));
+  const existingMembership = await findExistingMembership(clubId, email, externalOrderId);
 
-  if (existingMembership) {
+  if (existingMembership && !options.upsert) {
     console.log(`Already exists: ${accountHolderName || email}`);
     return { importedMemberships: 0, importedPersons: 0, skipped: 1 };
   }
@@ -238,70 +377,150 @@ const importRow = async (row: CsvRow, clubId: string, dryRun: boolean): Promise<
   const tierMapping = mapPaymentToTier(paymentAmountCents);
   const phone = cleanPhoneNumber(getField(row, "Mobile phone numbers for all people on membership:"));
   const emergencyContactPhone = cleanPhoneNumber(getField(row, "Emergency Contact Mobile Number"));
-  const emergencyContactName = getField(row, "Emergency Contact Full Name") || undefined;
-  const allergies = getField(row, "Do you require any special accommodations?...") || undefined;
+  const emergencyContactName = trimOrNull(getField(row, "Emergency Contact Full Name"));
+  const emergencyContactEmail = trimOrNull(getField(row, "Emergency Contact Email"));
+  const allergies = trimOrNull(getField(row, "Do you require any special accommodations?..."));
   const familyMembers = parseFamilyMembers(row, accountHolderName);
   const personCount = 1 + familyMembers.length;
+  const membershipData: MembershipImportData = {
+    clubId,
+    tier: tierMapping.tier,
+    maxMembers: tierMapping.maxMembers,
+    paymentStatus: "paid",
+    paymentAmountCents,
+    source: IMPORT_SOURCE,
+    startsAt: SEASON_START,
+    endsAt: SEASON_END,
+    ghlContactId: email,
+    addressStreet: trimOrNull(getField(row, "Street Address")),
+    addressCity: trimOrNull(getField(row, "City")),
+    addressState: trimOrNull(getField(row, "State")),
+    addressPostalCode: trimOrNull(getField(row, "Postal Code")),
+    addressCountry: trimOrNull(getField(row, "Country")),
+    submittedAt,
+    externalOrderId,
+    signupIp: trimOrNull(getField(row, "IP")),
+    signupTimezone: trimOrNull(getField(row, "Timezone")),
+    signupUrl: trimOrNull(getField(row, "URL")),
+    emailVerified: parseBool(getField(row, "Email Verified")),
+    phoneVerified: parseBool(getField(row, "Phone Verified")),
+    guestPassesTotal: calculateInitialGuestPasses(submittedAt)
+  };
 
-  if (!dryRun) {
+  if (!options.dryRun) {
     await prisma.$transaction(async (transaction) => {
-      const membership = await transaction.membership.create({
-        data: {
-          clubId,
-          tier: tierMapping.tier,
-          maxMembers: tierMapping.maxMembers,
-          paymentStatus: "paid",
-          paymentAmountCents,
-          source: IMPORT_SOURCE,
-          startsAt: SEASON_START,
-          endsAt: SEASON_END,
-          ghlContactId: email
+      const membership = existingMembership
+        ? await transaction.membership.update({
+            where: { id: existingMembership.id },
+            data: membershipData,
+            select: { id: true }
+          })
+        : await transaction.membership.create({
+            data: membershipData,
+            select: { id: true }
+          });
+
+      const existingPrimaryByContact = await transaction.person.findUnique({
+        where: {
+          clubId_ghlContactId: {
+            clubId,
+            ghlContactId: email
+          }
         },
         select: { id: true }
       });
+      const existingPrimary =
+        existingPrimaryByContact ??
+        (await transaction.person.findFirst({
+          where: {
+            clubId,
+            membershipId: membership.id,
+            isPrimary: true
+          },
+          select: { id: true }
+        }));
+      const primaryData = {
+        clubId,
+        membershipId: membership.id,
+        firstName: accountHolder.firstName,
+        lastName: accountHolder.lastName,
+        email,
+        phone,
+        ghlContactId: email,
+        isPrimary: true,
+        relationship: "self",
+        emergencyContactName,
+        emergencyContactPhone,
+        emergencyContactEmail,
+        allergies
+      };
 
-      await transaction.person.create({
-        data: {
+      if (existingPrimary) {
+        await transaction.person.update({
+          where: { id: existingPrimary.id },
+          data: primaryData
+        });
+      } else {
+        await transaction.person.create({ data: primaryData });
+      }
+
+      const existingFamilyPersons = await transaction.person.findMany({
+        where: {
           clubId,
           membershipId: membership.id,
-          firstName: accountHolder.firstName,
-          lastName: accountHolder.lastName,
-          email,
-          phone,
-          isPrimary: true,
-          relationship: "self",
-          emergencyContactName,
-          emergencyContactPhone,
-          allergies
+          isPrimary: false
+        },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true
         }
       });
 
       for (const familyMember of familyMembers) {
-        await transaction.person.create({
-          data: {
-            clubId,
-            membershipId: membership.id,
-            firstName: familyMember.firstName,
-            lastName: familyMember.lastName,
-            isPrimary: false,
-            relationship: "family_member"
-          }
-        });
+        const normalizedFamilyName = normalizeName(`${familyMember.firstName} ${familyMember.lastName}`);
+        const existingFamilyPerson = existingFamilyPersons.find(
+          (person) => normalizeName(`${person.firstName} ${person.lastName}`) === normalizedFamilyName
+        );
+        const familyData = {
+          clubId,
+          membershipId: membership.id,
+          firstName: familyMember.firstName,
+          lastName: familyMember.lastName,
+          email: familyMember.email,
+          age: familyMember.age,
+          isPrimary: false,
+          relationship: familyMember.relationship,
+          emergencyContactName,
+          emergencyContactPhone,
+          emergencyContactEmail,
+          allergies
+        };
+
+        if (existingFamilyPerson) {
+          await transaction.person.update({
+            where: { id: existingFamilyPerson.id },
+            data: familyData
+          });
+        } else {
+          await transaction.person.create({ data: familyData });
+        }
       }
     });
   }
 
   const familyNames = formatFamilyNames(familyMembers);
-  console.log(`Imported: ${accountHolderName}${familyNames ? ` (family: ${familyNames})` : ""}`);
+  const action = existingMembership && options.upsert ? "Updated" : "Imported";
+  console.log(`${action}: ${accountHolderName}${familyNames ? ` (family: ${familyNames})` : ""}`);
 
-  return { importedMemberships: 1, importedPersons: personCount, skipped: 0 };
+  return { importedMemberships: existingMembership && options.upsert ? 0 : 1, importedPersons: personCount, skipped: 0 };
 };
 
 const main = async (): Promise<void> => {
-  const { dryRun, csvPath } = parseArgs(process.argv.slice(2));
+  const { dryRun, upsert, csvPath } = parseArgs(process.argv.slice(2));
 
   if (!csvPath) {
-    throw new Error("Usage: npm run import:members -- [--dry-run] ./data/members.csv");
+    throw new Error("Usage: npm run import:members -- [--dry-run] [--upsert] ./data/members.csv");
   }
 
   const ghlLocationId = process.env.GHL_LOCATION_ID;
@@ -326,11 +545,11 @@ const main = async (): Promise<void> => {
   const rows = parseCsv(csvContent);
   const summary: Summary = { importedMemberships: 0, importedPersons: 0, skipped: 0 };
 
-  console.log(`${dryRun ? "Dry run: " : ""}Importing ${rows.length} rows for ${club.name}`);
+  console.log(`${dryRun ? "Dry run: " : ""}${upsert ? "Upsert mode: " : ""}Importing ${rows.length} rows for ${club.name}`);
 
   for (const row of rows) {
     try {
-      const rowSummary = await importRow(row, club.id, dryRun);
+      const rowSummary = await importRow(row, club.id, { dryRun, upsert });
       summary.importedMemberships += rowSummary.importedMemberships;
       summary.importedPersons += rowSummary.importedPersons;
       summary.skipped += rowSummary.skipped;
