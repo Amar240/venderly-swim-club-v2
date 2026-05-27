@@ -61,20 +61,30 @@ model Staff {
 }
 
 model Membership {
-  id                 String              @id @default(uuid())
-  clubId             String              @map("club_id")
-  membershipCode     String?             @map("membership_code")
+  id                     String              @id @default(uuid())
+  clubId                 String              @map("club_id")
+  membershipCode         String?             @map("membership_code")
   externalMembershipId String?           @map("external_membership_id")
-  externalCustomerId String?             @map("external_customer_id")
-  status             MembershipStatus    @default(ACTIVE)
-  startsAt           DateTime?           @map("starts_at")
-  endsAt             DateTime?           @map("ends_at")
-  createdAt          DateTime            @default(now()) @map("created_at")
-  updatedAt          DateTime            @updatedAt @map("updated_at")
-  club               Club                @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  persons            Person[]
-  checkinEvents      CheckinEvent[]
-  guestPassPurchases GuestPassPurchase[]
+  externalCustomerId     String?             @map("external_customer_id")
+  tier                   String              @default("unknown") @map("tier")
+  maxMembers             Int                 @default(1) @map("max_members")
+  paymentAmountCents     Int                 @default(0) @map("payment_amount_cents")
+  paymentStatus          String              @default("paid") @map("payment_status")
+  stripePaymentIntentId  String?             @map("stripe_payment_intent_id")
+  stripeSetupIntentId    String?             @map("stripe_setup_intent_id")
+  guestPassesTotal       Int                 @default(0) @map("guest_passes_total")
+  guestPassesUsed        Int                 @default(0) @map("guest_passes_used")
+  source                 String              @default("ghl_signup") @map("source")
+  ghlContactId           String?             @map("ghl_contact_id")
+  status                 MembershipStatus    @default(ACTIVE)
+  startsAt               DateTime?           @map("starts_at")
+  endsAt                 DateTime?           @map("ends_at")
+  createdAt              DateTime            @default(now()) @map("created_at")
+  updatedAt              DateTime            @updatedAt @map("updated_at")
+  club                   Club                @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  persons                Person[]
+  checkinEvents          CheckinEvent[]
+  guestPassPurchases     GuestPassPurchase[]
 
   @@unique([clubId, membershipCode])
   @@unique([clubId, externalMembershipId])
@@ -91,6 +101,12 @@ model Person {
   email              String?
   phone              String?
   ghlContactId       String?             @map("ghl_contact_id")
+  age                Int?                @map("age")
+  relationship       String              @default("self") @map("relationship")
+  allergies          String?             @map("allergies")
+  emergencyContactName  String?          @map("emergency_contact_name")
+  emergencyContactPhone String?          @map("emergency_contact_phone")
+  notes              String?             @map("notes")
   isPrimary          Boolean             @default(false) @map("is_primary")
   status             PersonStatus        @default(ACTIVE)
   createdAt          DateTime            @default(now()) @map("created_at")
@@ -114,6 +130,10 @@ model CheckinEvent {
   membershipId        String?            @map("membership_id")
   guestPassPurchaseId String?            @map("guest_pass_purchase_id")
   staffId             String?            @map("staff_id")
+  eventType           String             @default("check_in") @map("event_type")
+  numGuests           Int                @default(0) @map("num_guests")
+  guestPassMethod     String?            @map("guest_pass_method")
+  source              String             @default("qr_form") @map("source")
   isActive            Boolean            @default(true) @map("is_active")
   checkedInAt         DateTime           @default(now()) @map("checked_in_at")
   signedOutAt         DateTime?          @map("signed_out_at")
