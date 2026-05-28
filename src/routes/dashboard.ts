@@ -3,6 +3,7 @@ import {
   getActiveCheckins,
   getDashboardSummary,
   getRecentCheckinEvents,
+  manualCheckin,
   manualSignout,
   searchMembers
 } from "../handlers/dashboard";
@@ -17,3 +18,4 @@ dashboardRouter.get("/active", getActiveCheckins);
 dashboardRouter.get("/recent", getRecentCheckinEvents);
 dashboardRouter.get("/search", searchMembers);
 dashboardRouter.post("/signout/manual", manualSignout);
+dashboardRouter.post("/checkin/manual", manualCheckin);

@@ -1,4 +1,5 @@
 import type { RequestHandler } from "express";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../middleware/errorHandler";
@@ -21,6 +22,10 @@ const searchQuerySchema = z.object({
 });
 
 const manualSignoutSchema = z.object({
+  personId: z.string().min(1)
+});
+
+const manualCheckinSchema = z.object({
   personId: z.string().min(1)
 });
 
@@ -121,7 +126,7 @@ export const getDashboardSummary: RequestHandler = async (_req, res, next) => {
       prisma.membership.count({
         where: {
           clubId,
-          createdAt: {
+          submittedAt: {
             gte: todayBounds.start,
             lt: todayBounds.end
           }
@@ -345,6 +350,94 @@ export const manualSignout: RequestHandler = async (req, res, next) => {
       message: `Signed out ${fullName(activeCheckin.person)}`
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+export const manualCheckin: RequestHandler = async (req, res, next) => {
+  try {
+    const staffResponse = res as StaffResponse;
+    const clubId = getStaffClubId(staffResponse);
+    const staffId = staffResponse.locals.staff.id;
+    const { personId } = manualCheckinSchema.parse(req.body);
+
+    const person = await prisma.person.findFirst({
+      where: { id: personId, clubId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        membershipId: true,
+        membership: {
+          select: {
+            id: true,
+            status: true,
+            tier: true,
+            maxMembers: true
+          }
+        }
+      }
+    });
+
+    if (!person) {
+      throw new HttpError(404, "PERSON_NOT_FOUND", "Member was not found");
+    }
+
+    if (person.membership.status !== "ACTIVE") {
+      throw new HttpError(
+        422,
+        "MEMBERSHIP_NOT_ACTIVE",
+        `Membership is ${person.membership.status.toLowerCase()}`
+      );
+    }
+
+    const existingActive = await prisma.checkinEvent.findFirst({
+      where: { personId: person.id, isActive: true },
+      select: { id: true }
+    });
+
+    if (existingActive) {
+      throw new HttpError(409, "ALREADY_CHECKED_IN", "Member is already checked in");
+    }
+
+    const activeMembershipCheckins = await prisma.checkinEvent.count({
+      where: { membershipId: person.membershipId, isActive: true }
+    });
+
+    if (activeMembershipCheckins >= person.membership.maxMembers) {
+      throw new HttpError(403, "MEMBERSHIP_AT_CAPACITY", "Membership is at capacity");
+    }
+
+    const checkinEvent = await prisma.checkinEvent.create({
+      data: {
+        clubId,
+        personId: person.id,
+        membershipId: person.membershipId,
+        staffId,
+        eventType: "check_in",
+        isActive: true,
+        checkedInAt: new Date(),
+        source: "staff_manual"
+      },
+      select: { id: true, checkedInAt: true }
+    });
+
+    res.json({
+      success: true,
+      message: `Welcome ${person.firstName}!`,
+      personName: fullName(person),
+      checkinEventId: checkinEvent.id,
+      checkedInAt: checkinEvent.checkedInAt.toISOString(),
+      membershipTier: person.membership.tier,
+      maxMembers: person.membership.maxMembers,
+      currentlyCheckedIn: activeMembershipCheckins + 1
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      next(new HttpError(409, "ALREADY_CHECKED_IN", "Member is already checked in"));
+      return;
+    }
+
     next(error);
   }
 };
