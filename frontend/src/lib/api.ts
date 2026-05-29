@@ -102,12 +102,33 @@ export interface MemberListItem {
   membershipTier: string;
   maxMembers: number;
   membershipStatus: string;
+  guestPassesTotal: number;
+  guestPassesUsed: number;
   familyCount: number;
   isCurrentlyIn: boolean;
 }
 
 export interface MembersResponse {
   members: MemberListItem[];
+}
+
+export interface MembershipListItem {
+  membershipId: string;
+  accountHolderPersonId: string | null;
+  accountHolderName: string;
+  accountHolderFirstName: string;
+  accountHolderLastName: string;
+  tier: string;
+  maxMembers: number;
+  status: string;
+  guestPassesTotal: number;
+  guestPassesUsed: number;
+  familyCount: number;
+  isAnyMemberCurrentlyIn: boolean;
+}
+
+export interface MembershipsResponse {
+  memberships: MembershipListItem[];
 }
 
 export interface MemberDetailFamilyMember {
@@ -119,9 +140,15 @@ export interface MemberDetailFamilyMember {
   phone: string;
   age: number | null;
   relationship: string;
+  allergies: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  emergencyContactEmail: string;
+  notes: string;
   isPrimary: boolean;
   status: string;
   isCurrentlyIn: boolean;
+  checkedInAt: string | null;
 }
 
 export interface MemberHistoryEvent {
@@ -166,6 +193,7 @@ export interface MemberDetail {
     externalOrderId: string;
     emailVerified: boolean;
     phoneVerified: boolean;
+    paymentAmountCents: number;
     guestPassesTotal: number;
     guestPassesUsed: number;
   };
@@ -177,10 +205,31 @@ export interface MemberDetailResponse {
   member: MemberDetail;
 }
 
+export interface ManualCheckinResponse {
+  success: true;
+  message: string;
+  personName: string;
+  checkinEventId: string;
+  checkedInAt: string;
+  membershipTier: string;
+  maxMembers: number;
+  currentlyCheckedIn: number;
+}
+
 export const postLogin = async (pin: string): Promise<LoginResponse> => {
   const response = await api.post<LoginResponse>("/auth/login", {
     email: "staff@wedgewood.com",
     pin
   });
+  return response.data;
+};
+
+export const postManualCheckin = async (personId: string): Promise<ManualCheckinResponse> => {
+  const response = await api.post<ManualCheckinResponse>("/dashboard/checkin/manual", { personId });
+  return response.data;
+};
+
+export const fetchMemberships = async (params: { q?: string; tier?: string }): Promise<MembershipsResponse> => {
+  const response = await api.get<MembershipsResponse>("/memberships", { params });
   return response.data;
 };

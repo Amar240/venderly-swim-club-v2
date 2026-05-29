@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { checkInHandler } from "../handlers/checkin";
+import { guestPassPurchaseHandler } from "../handlers/guestPassPurchase";
 import { signOutHandler } from "../handlers/signout";
 import { signupHandler } from "../handlers/signup";
 import { webhookAuth } from "../middleware/webhookAuth";
@@ -30,6 +31,7 @@ webhooksRouter.post("/debug", (req, res) => {
 webhooksRouter.post("/ghl/signup", signupHandler);
 webhooksRouter.post("/ghl/checkin", checkInHandler);
 webhooksRouter.post("/ghl/signout", signOutHandler);
+webhooksRouter.post("/ghl/guestpass", guestPassPurchaseHandler);
 
 webhooksRouter.use(webhookAuth);
 

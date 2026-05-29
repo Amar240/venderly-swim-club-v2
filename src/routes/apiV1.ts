@@ -23,6 +23,18 @@ const memberParamsSchema = z.object({
   id: z.string().min(1)
 });
 
+const listMembershipsQuerySchema = z.object({
+  q: z.string().trim().optional(),
+  tier: z.string().trim().optional(),
+  limit: z
+    .string()
+    .optional()
+    .transform((value) => {
+      const parsed = value ? Number.parseInt(value, 10) : 100;
+      return Number.isNaN(parsed) ? 100 : Math.min(Math.max(parsed, 1), 200);
+    })
+});
+
 const fullName = (person: { firstName: string; lastName: string }): string =>
   `${person.firstName} ${person.lastName}`.trim();
 
@@ -49,6 +61,7 @@ const tierWhere = (tier: "all" | "family" | "adult" | "student") => {
 
 export const apiV1Router = Router();
 const membersRouter = Router();
+const membershipsRouter = Router();
 
 apiV1Router.get("/health", (_req, res) => {
   res.json({
@@ -66,8 +79,88 @@ apiV1Router.use("/auth", authRouter);
 apiV1Router.use("/dashboard", dashboardRouter);
 apiV1Router.use("/admin", adminRouter);
 apiV1Router.use("/members", membersRouter);
+apiV1Router.use("/memberships", membershipsRouter);
 
 membersRouter.use(jwtAuth);
+membershipsRouter.use(jwtAuth);
+
+membershipsRouter.get("/", async (req, res, next) => {
+  try {
+    const staffResponse = res as StaffResponse;
+    const clubId = staffResponse.locals.staff.clubId;
+    const { q, tier, limit } = listMembershipsQuerySchema.parse(req.query);
+    const selectedTier = normalizeTier(tier);
+    const tierFilter = tierWhere(selectedTier);
+
+    const memberships = await prisma.membership.findMany({
+      where: {
+        clubId,
+        ...(tierFilter ? { tier: tierFilter } : {}),
+        ...(q
+          ? {
+              persons: {
+                some: {
+                  OR: [
+                    { firstName: { contains: q, mode: "insensitive" } },
+                    { lastName: { contains: q, mode: "insensitive" } },
+                    { email: { contains: q, mode: "insensitive" } }
+                  ]
+                }
+              }
+            }
+          : {})
+      },
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        tier: true,
+        maxMembers: true,
+        status: true,
+        guestPassesTotal: true,
+        guestPassesUsed: true,
+        persons: {
+          orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            isPrimary: true,
+            checkinEvents: {
+              where: { isActive: true },
+              select: { id: true },
+              take: 1
+            }
+          }
+        }
+      }
+    });
+
+    res.json({
+      memberships: memberships.map((membership) => {
+        const primary = membership.persons.find((person) => person.isPrimary) ?? membership.persons[0];
+        const anyInPool = membership.persons.some((person) => person.checkinEvents.length > 0);
+
+        return {
+          membershipId: membership.id,
+          accountHolderPersonId: primary?.id ?? null,
+          accountHolderName: primary ? fullName(primary) : "Unknown",
+          accountHolderFirstName: primary?.firstName ?? "",
+          accountHolderLastName: primary?.lastName ?? "",
+          tier: membership.tier,
+          maxMembers: membership.maxMembers,
+          status: membership.status,
+          guestPassesTotal: membership.guestPassesTotal,
+          guestPassesUsed: membership.guestPassesUsed,
+          familyCount: membership.persons.length,
+          isAnyMemberCurrentlyIn: anyInPool
+        };
+      })
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 membersRouter.get("/", async (req, res, next) => {
   try {
@@ -113,6 +206,8 @@ membersRouter.get("/", async (req, res, next) => {
             tier: true,
             maxMembers: true,
             status: true,
+            guestPassesTotal: true,
+            guestPassesUsed: true,
             persons: {
               select: { id: true }
             }
@@ -133,6 +228,8 @@ membersRouter.get("/", async (req, res, next) => {
         membershipTier: person.membership.tier,
         maxMembers: person.membership.maxMembers,
         membershipStatus: person.membership.status,
+        guestPassesTotal: person.membership.guestPassesTotal,
+        guestPassesUsed: person.membership.guestPassesUsed,
         familyCount: person.membership.persons.length,
         isCurrentlyIn: person.checkinEvents.length > 0
       }))
@@ -194,6 +291,7 @@ membersRouter.get("/:id", async (req, res, next) => {
             externalOrderId: true,
             emailVerified: true,
             phoneVerified: true,
+            paymentAmountCents: true,
             guestPassesTotal: true,
             guestPassesUsed: true,
             persons: {
@@ -206,11 +304,16 @@ membersRouter.get("/:id", async (req, res, next) => {
                 phone: true,
                 age: true,
                 relationship: true,
+                allergies: true,
+                emergencyContactName: true,
+                emergencyContactPhone: true,
+                emergencyContactEmail: true,
+                notes: true,
                 isPrimary: true,
                 status: true,
                 checkinEvents: {
                   where: { isActive: true },
-                  select: { id: true },
+                  select: { id: true, checkedInAt: true },
                   take: 1
                 }
               }
@@ -257,6 +360,7 @@ membersRouter.get("/:id", async (req, res, next) => {
           externalOrderId: person.membership.externalOrderId ?? "",
           emailVerified: person.membership.emailVerified,
           phoneVerified: person.membership.phoneVerified,
+          paymentAmountCents: person.membership.paymentAmountCents,
           guestPassesTotal: person.membership.guestPassesTotal,
           guestPassesUsed: person.membership.guestPassesUsed
         },
@@ -269,9 +373,15 @@ membersRouter.get("/:id", async (req, res, next) => {
           phone: familyMember.phone ?? "",
           age: familyMember.age,
           relationship: familyMember.relationship,
+          allergies: familyMember.allergies ?? "",
+          emergencyContactName: familyMember.emergencyContactName ?? "",
+          emergencyContactPhone: familyMember.emergencyContactPhone ?? "",
+          emergencyContactEmail: familyMember.emergencyContactEmail ?? "",
+          notes: familyMember.notes ?? "",
           isPrimary: familyMember.isPrimary,
           status: familyMember.status,
-          isCurrentlyIn: familyMember.checkinEvents.length > 0
+          isCurrentlyIn: familyMember.checkinEvents.length > 0,
+          checkedInAt: familyMember.checkinEvents[0]?.checkedInAt.toISOString() ?? null
         })),
         history: person.checkinEvents.map((event) => ({
           eventId: event.id,

@@ -1,30 +1,38 @@
 import { Users, UserPlus, Ticket, Search } from "lucide-react";
+import { motion } from "framer-motion";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ActiveMemberRow } from "../components/ActiveMemberRow";
 import { ActivityFeedItem } from "../components/ActivityFeedItem";
 import { CapacityBar } from "../components/CapacityBar";
+import { CapacityBanner } from "../components/CapacityBanner";
 import { MemberDetailSheet } from "../components/MemberDetailSheet";
 import { StatCard } from "../components/StatCard";
-import { TopBar } from "../components/TopBar";
+import { Badge } from "../components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
-import { useActiveCheckins, useDashboardSearch, useDashboardSummary, useManualSignout, useRecentActivity } from "../hooks/useDashboard";
+import { useActiveCheckins, useDashboardSummary, useManualSignout, useRecentActivity } from "../hooks/useDashboard";
 import { useConnection } from "../hooks/useConnection";
+import { useMemberships } from "../hooks/useMembers";
+import { useMotion } from "../hooks/useMotion";
+import { useWakeLock } from "../hooks/useWakeLock";
+import { staggerChildren } from "../lib/motion";
 import { cn } from "../lib/utils";
 
 export const Dashboard = () => {
+  useWakeLock();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const summaryQuery = useDashboardSummary();
   const activeQuery = useActiveCheckins();
   const recentQuery = useRecentActivity();
-  const searchQuery = useDashboardSearch(debouncedSearch);
+  const searchQuery = useMemberships({ q: debouncedSearch, tier: "All" });
   const manualSignout = useManualSignout();
   const connection = useConnection();
+  const { reduced } = useMotion();
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
@@ -34,7 +42,7 @@ export const Dashboard = () => {
   const summary = summaryQuery.data;
   const active = activeQuery.data;
   const recent = recentQuery.data;
-  const searchMatches = searchQuery.data?.matches ?? [];
+  const searchMatches = debouncedSearch.trim().length >= 2 ? searchQuery.data?.memberships ?? [] : [];
   const panelClass = cn("transition-opacity", connection.isOffline && "opacity-70");
 
   const signOut = (personId: string, name: string): void => {
@@ -49,17 +57,21 @@ export const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-brand-background">
-      <TopBar />
+    <>
       <main className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
-        <Card className={cn("border-brand-border bg-white shadow-sm", panelClass)}>
+        {summary ? (
+          <CapacityBanner percent={summary.capacityPercent} capacity={summary.poolCapacity} current={summary.currentlyInPool} />
+        ) : null}
+        <Card className={cn("border-brand-border bg-brand-surface shadow-sm", panelClass)}>
           <CardContent className="grid gap-8 p-6 md:grid-cols-[1fr_320px] md:items-center">
             <div>
               <p className="text-sm font-semibold uppercase tracking-wide text-brand-primary">Currently in pool</p>
               {summary ? (
                 <h1 className="mt-2 text-5xl font-bold tracking-tight text-brand-navy md:text-6xl">
-                  {summary.currentlyInPool}
-                  <span className="ml-3 text-2xl font-semibold text-slate-500">swimmers</span>
+                  <AnimatedNumber value={summary.currentlyInPool} reduced={reduced} />
+                  <span className="ml-3 text-2xl font-semibold text-slate-500">
+                    {summary.currentlyInPool === 1 ? "swimmer" : "swimmers"}
+                  </span>
                 </h1>
               ) : (
                 <Skeleton className="mt-3 h-16 w-72" />
@@ -77,26 +89,35 @@ export const Dashboard = () => {
             placeholder="Search members by name or email"
             className="h-14 border-brand-border bg-white pl-12 text-base shadow-sm"
           />
-          {debouncedSearch.length >= 2 && searchMatches.length > 0 ? (
-            <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-brand-border bg-white shadow-xl">
+          {debouncedSearch.trim().length >= 2 && searchMatches.length > 0 ? (
+            <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-brand-border bg-brand-surface shadow-xl">
               {searchMatches.map((match) => (
                 <button
                   type="button"
-                  key={match.personId}
-                  className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-brand-background"
+                  key={match.membershipId}
+                  disabled={!match.accountHolderPersonId}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-brand-background disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={() => {
-                    setSelectedPersonId(match.personId);
+                    if (!match.accountHolderPersonId) {
+                      return;
+                    }
+
+                    setSelectedPersonId(match.accountHolderPersonId);
                     setSearch("");
+                    setDebouncedSearch("");
                   }}
                 >
-                  <span>
-                    <span className="font-semibold text-brand-navy">
-                      {match.firstName} {match.lastName}
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold text-brand-navy">
+                      {match.accountHolderName}
                     </span>
-                    <span className="ml-2 text-sm text-slate-500">{match.membershipTier}</span>
+                    <span className="text-sm text-slate-500">{match.familyCount} family members</span>
                   </span>
-                  <span className={match.isCurrentlyIn ? "text-sm font-medium text-brand-success" : "text-sm text-slate-500"}>
-                    {match.isCurrentlyIn ? "In pool" : match.membershipStatus}
+                  <span className="flex shrink-0 items-center gap-2">
+                    <Badge className="bg-brand-background text-brand-navy">{match.tier}</Badge>
+                    {match.isAnyMemberCurrentlyIn ? (
+                      <span className="text-sm font-semibold text-brand-success">In pool</span>
+                    ) : null}
                   </span>
                 </button>
               ))}
@@ -109,14 +130,21 @@ export const Dashboard = () => {
             {activeQuery.isLoading ? (
               <SkeletonList />
             ) : active?.persons.length ? (
-              active.persons.map((person) => (
-                <ActiveMemberRow
-                  key={person.checkinEventId}
-                  person={person}
-                  onSignOut={signOut}
-                  isSigningOut={manualSignout.isPending}
-                />
-              ))
+              <motion.div
+                initial={reduced ? false : "hidden"}
+                animate="show"
+                variants={reduced ? undefined : staggerChildren}
+                className="space-y-3"
+              >
+                {active.persons.map((person) => (
+                  <ActiveMemberRow
+                    key={person.checkinEventId}
+                    person={person}
+                    onSignOut={signOut}
+                    isSigningOut={manualSignout.isPending}
+                  />
+                ))}
+              </motion.div>
             ) : (
               <EmptyState>🌊 Pool is quiet right now</EmptyState>
             )}
@@ -140,12 +168,47 @@ export const Dashboard = () => {
         </section>
       </main>
       <MemberDetailSheet personId={selectedPersonId} open={Boolean(selectedPersonId)} onOpenChange={(open) => !open && setSelectedPersonId(null)} />
-    </div>
+    </>
   );
 };
 
+const AnimatedNumber = ({ value, reduced }: { value: number; reduced: boolean }) => {
+  const [displayValue, setDisplayValue] = useState(value);
+  const displayRef = useRef(value);
+
+  useEffect(() => {
+    if (reduced) {
+      displayRef.current = value;
+      setDisplayValue(value);
+      return undefined;
+    }
+
+    const start = displayRef.current;
+    const change = value - start;
+    const startTime = performance.now();
+    const duration = 600;
+    let frame = 0;
+
+    const tick = (time: number) => {
+      const progress = Math.min((time - startTime) / duration, 1);
+      const nextValue = Math.round(start + change * progress);
+      displayRef.current = nextValue;
+      setDisplayValue(nextValue);
+
+      if (progress < 1) {
+        frame = requestAnimationFrame(tick);
+      }
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [reduced, value]);
+
+  return <span>{displayValue}</span>;
+};
+
 const DashboardColumn = ({ title, children }: { title: string; children: ReactNode }) => (
-  <Card className="border-brand-border bg-white shadow-sm">
+  <Card className="border-brand-border bg-brand-surface shadow-sm">
     <CardHeader>
       <CardTitle className="text-lg text-brand-navy">{title}</CardTitle>
     </CardHeader>

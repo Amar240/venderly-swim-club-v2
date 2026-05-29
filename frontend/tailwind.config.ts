@@ -13,15 +13,15 @@ const config = {
       },
       colors: {
         brand: {
-          primary: "#2196F3",
-          primaryHover: "#1E88E5",
-          navy: "#0F1B2D",
-          background: "#F0F7FA",
-          surface: "#FFFFFF",
+          primary: "rgb(var(--brand-primary) / <alpha-value>)",
+          primaryHover: "rgb(var(--brand-primary-hover) / <alpha-value>)",
+          navy: "rgb(var(--brand-navy) / <alpha-value>)",
+          background: "rgb(var(--brand-background) / <alpha-value>)",
+          surface: "rgb(var(--brand-surface) / <alpha-value>)",
           success: "#2E7D32",
           warning: "#F9A825",
           danger: "#D32F2F",
-          border: "#EEEEEE"
+          border: "rgb(var(--brand-border) / <alpha-value>)"
         },
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",

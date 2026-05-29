@@ -1,8 +1,11 @@
 import { QueryClientProvider } from "@tanstack/react-query";
+import { LazyMotion, domAnimation } from "framer-motion";
 import type { ReactNode } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { Toaster } from "sonner";
+import { TopBar } from "./components/TopBar";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
+import { UiPrefsProvider } from "./hooks/useUiPrefs";
 import { queryClient } from "./lib/queryClient";
 import { Dashboard } from "./pages/Dashboard";
 import { Login } from "./pages/Login";
@@ -28,49 +31,47 @@ const RootRedirect = () => {
   return <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />;
 };
 
+const StaffLayout = () => (
+  <div className="min-h-screen bg-brand-background">
+    <TopBar />
+    <Outlet />
+  </div>
+);
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/members"
-              element={
-                <ProtectedRoute>
-                  <Members />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/members/:id"
-              element={
-                <ProtectedRoute>
-                  <Members />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/reports"
-              element={
-                <ProtectedRoute adminOnly>
-                  <Reports />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="*" element={<RootRedirect />} />
-          </Routes>
-        </BrowserRouter>
-        <Toaster richColors position="top-center" />
+        <UiPrefsProvider>
+          <LazyMotion features={domAnimation} strict>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route
+                  element={
+                    <ProtectedRoute>
+                      <StaffLayout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/members" element={<Members />} />
+                  <Route path="/members/:id" element={<Members />} />
+                </Route>
+                <Route
+                  path="/reports"
+                  element={
+                    <ProtectedRoute adminOnly>
+                      <Reports />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route path="*" element={<RootRedirect />} />
+              </Routes>
+            </BrowserRouter>
+            <Toaster richColors position="top-center" />
+          </LazyMotion>
+        </UiPrefsProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
