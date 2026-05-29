@@ -13,9 +13,8 @@ import { Badge } from "../components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
-import { useActiveCheckins, useDashboardSummary, useManualSignout, useRecentActivity } from "../hooks/useDashboard";
+import { useActiveCheckins, useDashboardSearch, useDashboardSummary, useManualSignout, useRecentActivity } from "../hooks/useDashboard";
 import { useConnection } from "../hooks/useConnection";
-import { useMemberships } from "../hooks/useMembers";
 import { useMotion } from "../hooks/useMotion";
 import { useWakeLock } from "../hooks/useWakeLock";
 import { staggerChildren } from "../lib/motion";
@@ -29,7 +28,7 @@ export const Dashboard = () => {
   const summaryQuery = useDashboardSummary();
   const activeQuery = useActiveCheckins();
   const recentQuery = useRecentActivity();
-  const searchQuery = useMemberships({ q: debouncedSearch, tier: "All" });
+  const searchQuery = useDashboardSearch(debouncedSearch);
   const manualSignout = useManualSignout();
   const connection = useConnection();
   const { reduced } = useMotion();
@@ -42,7 +41,7 @@ export const Dashboard = () => {
   const summary = summaryQuery.data;
   const active = activeQuery.data;
   const recent = recentQuery.data;
-  const searchMatches = debouncedSearch.trim().length >= 2 ? searchQuery.data?.memberships ?? [] : [];
+  const searchMatches = debouncedSearch.trim().length >= 2 ? searchQuery.data?.matches ?? [] : [];
   const panelClass = cn("transition-opacity", connection.isOffline && "opacity-70");
 
   const signOut = (personId: string, name: string): void => {
@@ -94,29 +93,25 @@ export const Dashboard = () => {
               {searchMatches.map((match) => (
                 <button
                   type="button"
-                  key={match.membershipId}
-                  disabled={!match.accountHolderPersonId}
+                  key={match.personId}
                   className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-brand-background disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={() => {
-                    if (!match.accountHolderPersonId) {
-                      return;
-                    }
-
-                    setSelectedPersonId(match.accountHolderPersonId);
+                    setSelectedPersonId(match.personId);
                     setSearch("");
                     setDebouncedSearch("");
                   }}
                 >
                   <span className="min-w-0">
                     <span className="block truncate font-semibold text-brand-navy">
-                      {match.accountHolderName}
+                      {[match.firstName, match.lastName].filter(Boolean).join(" ")}
                     </span>
-                    <span className="text-sm text-slate-500">{match.familyCount} family members</span>
+                    <span className="text-sm text-slate-500">
+                      {match.membershipTier} · {match.familyMembers.length + 1} family members
+                    </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
-                    <Badge className="bg-brand-background text-brand-navy">{match.tier}</Badge>
-                    {match.isAnyMemberCurrentlyIn ? (
-                      <span className="text-sm font-semibold text-brand-success">In pool</span>
+                    {match.isCurrentlyIn ? (
+                      <Badge className="bg-brand-success text-white">In pool</Badge>
                     ) : null}
                   </span>
                 </button>

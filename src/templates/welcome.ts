@@ -1,98 +1,158 @@
-import { escapeHtml } from "./layout";
+import { escapeHtml, renderPillList } from "./layout";
 
-export type WelcomeStatus = "success" | "already_checked_in" | "not_found" | "at_capacity";
+export type WelcomeState =
+  | {
+      status: "success";
+      name: string;
+      checkedIn: string[];
+      passes: number | null;
+      redirectUrl: string;
+    }
+  | { status: "already_checked_in"; name: string }
+  | { status: "batch_name_unmatched"; unmatched: string[] }
+  | { status: "not_found" }
+  | { status: "at_capacity" }
+  | { status: "insufficient_passes"; remaining: number | null }
+  | { status: "default"; redirectUrl: string };
 
-export const renderWelcome = (opts: {
-  status: string;
-  name: string;
-  tier: string;
-  passes: number | null;
-  familyInPool: number;
-}): { title: string; body: string; refreshSeconds?: number; autoRedirectSeconds?: number; redirectUrl?: string } => {
-  const status = opts.status as WelcomeStatus;
-  const name = escapeHtml(opts.name);
+const renderCountdown = (): string => `
+  <p class="countdown">Returning in <span id="countdown">10</span> seconds...</p>
+  <script>
+    (function () {
+      var remaining = 10;
+      var el = document.getElementById("countdown");
+      if (!el) return;
+      window.setInterval(function () {
+        remaining = Math.max(0, remaining - 1);
+        el.textContent = String(remaining);
+      }, 1000);
+    })();
+  </script>`;
 
-  if (status === "already_checked_in") {
-    return {
-      title: "Already checked in",
-      body: `
-      <div class="card">
-        <div class="icon-circle warning">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
-        </div>
-        <h1 class="headline">You're already checked in</h1>
-        <p class="subline">Looks like ${name} is already checked in. Have a great swim!</p>
-        <div class="info-block"><div class="label">If this looks wrong</div><div class="value">Please see the staff at the front desk for help.</div></div>
-      </div>`
-    };
+export const renderWelcome = (
+  state: WelcomeState
+): { title: string; body: string; autoRedirectSeconds?: number; redirectUrl?: string } => {
+  switch (state.status) {
+    case "success": {
+      const name = escapeHtml(state.name || "there");
+      const checkedInList = renderPillList(state.checkedIn);
+      const passesBlock =
+        state.passes !== null && state.passes > 0
+          ? `<div class="info-block"><div class="label">Guest passes remaining</div><div class="value">${state.passes} ${state.passes === 1 ? "pass" : "passes"}</div></div>`
+          : "";
+
+      return {
+        title: `Welcome ${state.name || "Member"}`,
+        autoRedirectSeconds: 10,
+        redirectUrl: state.redirectUrl,
+        body: `
+          <div class="card">
+            <div class="status-emoji">🏊</div>
+            <h1 class="headline">Welcome ${name}! 🏊</h1>
+            <p class="subline">You're checked in. Have a great swim.</p>
+            ${
+              checkedInList
+                ? `<div class="info-block"><div class="label">Checked in now</div>${checkedInList}</div>`
+                : ""
+            }
+            ${passesBlock}
+            ${renderCountdown()}
+          </div>`
+      };
+    }
+
+    case "already_checked_in": {
+      const name = escapeHtml(state.name || "This member");
+
+      return {
+        title: "Already checked in",
+        body: `
+          <div class="card">
+            <div class="status-emoji">⚠️</div>
+            <h1 class="headline">You're already checked in!</h1>
+            <p class="subline">${name} already has an active check-in.</p>
+            <div class="alert-warning">See staff if something seems wrong.</div>
+          </div>`
+      };
+    }
+
+    case "batch_name_unmatched": {
+      const unmatchedList = renderPillList(state.unmatched);
+      const unmatchedNames = escapeHtml(state.unmatched.join(", "));
+
+      return {
+        title: "Please see staff",
+        body: `
+          <div class="card">
+            <div class="status-emoji">⚠️</div>
+            <h1 class="headline">${
+              unmatchedNames ? `We couldn't find: ${unmatchedNames}` : "We couldn't find those members"
+            }</h1>
+            ${
+              unmatchedList
+                ? `<div class="info-block"><div class="label">Names to check</div>${unmatchedList}</div>`
+                : ""
+            }
+            <div class="alert-warning">Please see staff.</div>
+          </div>`
+      };
+    }
+
+    case "not_found":
+      return {
+        title: "Membership not found",
+        body: `
+          <div class="card">
+            <div class="status-emoji">⚠️</div>
+            <h1 class="headline">Membership not found</h1>
+            <p class="subline">Please see staff at the front desk.</p>
+          </div>`
+      };
+
+    case "at_capacity":
+      return {
+        title: "Pool at capacity",
+        body: `
+          <div class="card">
+            <div class="status-emoji">⚠️</div>
+            <h1 class="headline">Pool is at capacity</h1>
+            <p class="subline">Please wait or see staff.</p>
+          </div>`
+      };
+
+    case "insufficient_passes": {
+      const remaining =
+        state.remaining !== null
+          ? `<div class="info-block"><div class="label">Guest passes remaining</div><div class="value">${state.remaining}</div></div>`
+          : "";
+
+      return {
+        title: "Guest passes needed",
+        body: `
+          <div class="card">
+            <div class="status-emoji">⚠️</div>
+            <h1 class="headline">Not enough guest passes</h1>
+            <p class="subline">Buy more at wedgewoodpool.com/guest-passes.</p>
+            ${remaining}
+            <div class="button-row">
+              <a href="https://wedgewoodpool.com/guest-passes" class="btn-primary">Buy guest passes</a>
+            </div>
+          </div>`
+      };
+    }
+
+    case "default":
+      return {
+        title: "Check in",
+        body: `
+          <div class="card">
+            <div class="status-emoji">🏊</div>
+            <h1 class="headline">Please complete the check-in form</h1>
+            <p class="subline">Use the pool gate form before entering the pool area.</p>
+            <div class="button-row">
+              <a href="${escapeHtml(state.redirectUrl)}" class="btn-primary">Back to form</a>
+            </div>
+          </div>`
+      };
   }
-
-  if (status === "not_found") {
-    return {
-      title: "Not found",
-      body: `
-      <div class="card">
-        <div class="icon-circle danger">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-          </svg>
-        </div>
-        <h1 class="headline">We couldn't find your membership</h1>
-        <p class="subline">No worries. Please head to the front desk and staff will help you sort it out.</p>
-        <div class="button-row">
-          <a href="https://wedgewoodpool.com/memberships" class="button">Sign up for a membership</a>
-          <a href="https://wedgewoodpool.com/pool-sign-in" class="button secondary">Back to sign in</a>
-        </div>
-      </div>`
-    };
-  }
-
-  if (status === "at_capacity") {
-    return {
-      title: "At capacity",
-      refreshSeconds: 30,
-      body: `
-      <div class="card">
-        <div class="icon-circle danger">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
-        </div>
-        <h1 class="headline">Pool is at capacity right now</h1>
-        <p class="subline">The pool is currently full. Please wait a few minutes or see staff for help.</p>
-        <p class="countdown">We'll re-check in 30 seconds.</p>
-      </div>`
-    };
-  }
-
-  return {
-    title: `Welcome ${opts.name}`,
-    autoRedirectSeconds: 10,
-    redirectUrl: "https://wedgewoodpool.com/pool-sign-in",
-    body: `
-      <div class="card">
-        <div class="icon-circle success">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-        </div>
-        <h1 class="headline">Welcome, ${name}!</h1>
-        <p class="subline">You're checked in. Have a great swim!</p>
-        ${opts.tier ? `<div class="info-block"><div class="label">Your membership</div><div class="value">${escapeHtml(opts.tier)}</div></div>` : ""}
-        ${
-          opts.passes !== null
-            ? `<div class="info-block"><div class="label">Guest passes remaining</div><div class="value">${opts.passes} ${opts.passes === 1 ? "pass" : "passes"}</div></div>`
-            : ""
-        }
-        ${
-          opts.familyInPool > 0
-            ? `<div class="info-block"><div class="label">Family in pool</div><div class="value">${opts.familyInPool} family ${opts.familyInPool === 1 ? "member" : "members"} already swimming</div></div>`
-            : ""
-        }
-        <p class="countdown">Returning to the pool gate in 10 seconds.</p>
-      </div>`
-  };
 };

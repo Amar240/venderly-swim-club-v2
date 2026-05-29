@@ -13,6 +13,14 @@ export const escapeHtml = (value: string): string =>
     return entities[char] ?? char;
   });
 
+export const renderPillList = (items: string[]): string => {
+  if (items.length === 0) {
+    return "";
+  }
+
+  return `<ul class="family-list">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+};
+
 export const renderLayout = (opts: {
   title: string;
   body: string;
@@ -28,7 +36,7 @@ export const renderLayout = (opts: {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#2196F3">
   <title>${escapeHtml(opts.title)} · Wedgewood Swim Club</title>
   ${redirectMeta}

@@ -1,5 +1,9 @@
 # React + TypeScript + Vite
 
+## Member-Facing Redirect Pages
+
+The Express app renders branded member confirmation pages at `/welcome`, `/goodbye`, and `/signed-up` after GHL form submission. Set `GHL_RETURN_URL` in the root environment to the next GHL form URL or pool home page used by the success-page countdown. The local example defaults this to `https://wedgewoodpool.com`.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
