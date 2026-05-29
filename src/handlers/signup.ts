@@ -33,6 +33,11 @@ const signupSchema = z
     "State": z.string().optional(),
     "Country": z.string().optional(),
     "Postal Code": z.string().optional(),
+    address1: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    postal_code: z.string().optional(),
+    country: z.string().optional(),
     "Do you require any special accommodations? If so, please describe:": z.string().optional(),
     "Select the # of Members for your Membership": z.string().optional()
   })
@@ -190,11 +195,11 @@ export const signupHandler: RequestHandler = async (req, res, next) => {
     const emergencyContactName = getStringField(input, "Emergency Contact Full Name");
     const emergencyContactPhone = cleanPhoneNumber(getStringField(input, "Emergency Contact Mobile Number"));
     const emergencyContactEmail = getStringField(input, "Emergency Contact Email");
-    const addressStreet = getStringField(input, "Street Address") ?? null;
-    const addressCity = getStringField(input, "City") ?? null;
-    const addressState = getStringField(input, "State") ?? null;
-    const addressCountry = getStringField(input, "Country") ?? null;
-    const addressPostalCode = getStringField(input, "Postal Code") ?? null;
+    const addressStreet = getStringField(input, "Street Address") ?? getStringField(input, "address1") ?? null;
+    const addressCity = getStringField(input, "City") ?? getStringField(input, "city") ?? null;
+    const addressState = getStringField(input, "State") ?? getStringField(input, "state") ?? null;
+    const addressCountry = getStringField(input, "Country") ?? getStringField(input, "country") ?? null;
+    const addressPostalCode = getStringField(input, "Postal Code") ?? getStringField(input, "postal_code") ?? null;
     const allergies = getStringField(input, "Do you require any special accommodations? If so, please describe:");
     const paymentData = input.triggerData as Prisma.InputJsonObject | undefined;
     const paymentStatus = getPaymentStatus(input.triggerData);
