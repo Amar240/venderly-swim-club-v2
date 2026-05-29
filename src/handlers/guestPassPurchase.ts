@@ -18,6 +18,19 @@ const guestPassPurchaseSchema = z
     contact_id: z.string().min(1),
     order_id: z.string().optional(),
     quantity: z.union([z.number(), z.string()]).optional(),
+    payment: z
+      .object({
+        transaction_id: z.string().optional(),
+        total_amount: z.union([z.number(), z.string()]).optional(),
+        line_items: z
+          .array(
+            z.object({
+              quantity: z.number().optional()
+            })
+          )
+          .optional()
+      })
+      .optional(),
     amount: z
       .union([z.number(), z.string(), z.null()])
       .optional()
@@ -69,14 +82,26 @@ export const guestPassPurchaseHandler: RequestHandler = async (req, res, next) =
       throw new HttpError(422, "MEMBERSHIP_NOT_FOUND", "No membership matches that contact");
     }
 
-    const amount = input.amount;
+    const rawAmount = input.payment?.total_amount ?? input.amount;
+    const amount =
+      rawAmount === undefined || rawAmount === "" || rawAmount === null
+        ? undefined
+        : typeof rawAmount === "number"
+          ? rawAmount
+          : Number.parseFloat(String(rawAmount));
+    const normalizedAmount = amount !== undefined && Number.isFinite(amount) && amount > 0 ? amount : undefined;
     const amountInDollars =
-      amount !== undefined && amount < 1000 ? amount : amount !== undefined ? amount / 100 : undefined;
+      normalizedAmount !== undefined && normalizedAmount < 1000
+        ? normalizedAmount
+        : normalizedAmount !== undefined
+          ? normalizedAmount / 100
+          : undefined;
+    const explicitQuantity = input.payment?.line_items?.[0]?.quantity ?? input.quantity;
     const explicit =
-      typeof input.quantity === "number"
-        ? input.quantity
-        : typeof input.quantity === "string" && input.quantity.trim() !== ""
-          ? Number.parseInt(input.quantity, 10)
+      typeof explicitQuantity === "number"
+        ? explicitQuantity
+        : typeof explicitQuantity === "string" && explicitQuantity.trim() !== ""
+          ? Number.parseInt(explicitQuantity, 10)
           : undefined;
     const derived = amountInDollars !== undefined ? Math.round(amountInDollars / PACK_PRICE_DOLLARS) : undefined;
     const quantity = (explicit && explicit > 0 ? explicit : derived) ?? 0;
@@ -90,11 +115,14 @@ export const guestPassPurchaseHandler: RequestHandler = async (req, res, next) =
     }
 
     const cappedQuantity = Math.min(quantity, 50);
+    const trimmedNestedOrder = input.payment?.transaction_id?.trim();
     const trimmedOrder = input.order_id?.trim();
     const orderId =
-      trimmedOrder && trimmedOrder.length > 0
+      trimmedNestedOrder && trimmedNestedOrder.length > 0
+        ? trimmedNestedOrder
+        : trimmedOrder && trimmedOrder.length > 0
         ? trimmedOrder
-        : `fallback-${input.contact_id}-${amount ?? "noamt"}-${cappedQuantity}`;
+        : `fallback-${input.contact_id}-${normalizedAmount ?? "noamt"}-${cappedQuantity}`;
     const passesToAdd = cappedQuantity * PASSES_PER_PACK;
 
     try {
