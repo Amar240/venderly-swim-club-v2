@@ -3,6 +3,14 @@ import { z } from "zod";
 import { logger } from "../lib/logger";
 import { prisma } from "../lib/prisma";
 
+const toStr = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return String(value[0] ?? "");
+  }
+
+  return String(value ?? "");
+};
+
 const signOutWebhookSchema = z
   .object({
     location: z
@@ -13,12 +21,12 @@ const signOutWebhookSchema = z
       .optional(),
     location_id: z.string().min(1).optional(),
     contact_id: z.string().optional(),
-    first_name: z.string().optional().default(""),
-    last_name: z.string().optional().default(""),
-    email: z.string().email(),
-    phone: z.string().optional(),
+    first_name: z.unknown().optional().default("").transform(toStr),
+    last_name: z.unknown().optional().default("").transform(toStr),
+    email: z.unknown().transform(toStr).pipe(z.string().email()),
+    phone: z.unknown().optional().default("").transform(toStr),
     "Membership Name": z.string().optional(),
-    "I want to sign-out all of the people in my membership": z.string().optional()
+    "I want to sign-out all of the people in my membership": z.unknown().optional().default("").transform(toStr)
   })
   .catchall(z.unknown());
 

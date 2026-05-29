@@ -4,6 +4,14 @@ import { z } from "zod";
 import { logger } from "../lib/logger";
 import { prisma } from "../lib/prisma";
 
+const toStr = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return String(value[0] ?? "");
+  }
+
+  return String(value ?? "");
+};
+
 const checkInWebhookSchema = z
   .object({
     location: z
@@ -14,25 +22,25 @@ const checkInWebhookSchema = z
       .optional(),
     location_id: z.string().min(1).optional(),
     contact_id: z.string().optional(),
-    first_name: z.string().optional().default(""),
-    last_name: z.string().optional().default(""),
-    email: z.string().email(),
-    phone: z.string().optional(),
+    first_name: z.unknown().optional().default("").transform(toStr),
+    last_name: z.unknown().optional().default("").transform(toStr),
+    email: z.unknown().transform(toStr).pipe(z.string().email()),
+    phone: z.unknown().optional().default("").transform(toStr),
     "Membership Name": z.string().optional(),
     "Number of members attending": z.string().optional(),
-    "Any guests?": z.string().optional(),
-    "# of Additional Members Signing In Now": z.union([z.string(), z.number()]).optional(),
-    "Full Name of 1st Member": z.string().optional(),
-    "Full Name of 2nd Member": z.string().optional(),
-    "Full Name of 3rd Member": z.string().optional(),
-    "Full Name of 4th Member": z.string().optional(),
-    "Full Name of 5th Member": z.string().optional(),
-    "Full Name of 6th Member": z.string().optional(),
-    "Full Name of 7th Member": z.string().optional(),
-    "Full Name of 8th Member": z.string().optional(),
-    "# of guests entering": z.union([z.string(), z.number()]).optional(),
+    "Any guests?": z.unknown().optional().default("").transform(toStr),
+    "# of Additional Members Signing In Now": z.unknown().optional().default("").transform(toStr),
+    "Full Name of 1st Member": z.unknown().optional().default("").transform(toStr),
+    "Full Name of 2nd Member": z.unknown().optional().default("").transform(toStr),
+    "Full Name of 3rd Member": z.unknown().optional().default("").transform(toStr),
+    "Full Name of 4th Member": z.unknown().optional().default("").transform(toStr),
+    "Full Name of 5th Member": z.unknown().optional().default("").transform(toStr),
+    "Full Name of 6th Member": z.unknown().optional().default("").transform(toStr),
+    "Full Name of 7th Member": z.unknown().optional().default("").transform(toStr),
+    "Full Name of 8th Member": z.unknown().optional().default("").transform(toStr),
+    "# of guests entering": z.unknown().optional().default("").transform(toStr),
     "Phone(Membership holder phone)": z.string().optional(),
-    "Select Option:": z.string().optional().default("Sign-In")
+    "Select Option:": z.unknown().optional().default("Sign-In").transform(toStr)
   })
   .catchall(z.unknown());
 
