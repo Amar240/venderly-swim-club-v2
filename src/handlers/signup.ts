@@ -21,6 +21,20 @@ const signupSchema = z
     email: z.string().email(),
     phone: z.string().optional(),
     triggerData: z.record(z.unknown()).optional(),
+    payment: z
+      .object({
+        total_amount: z.union([z.number(), z.string()]).optional(),
+        line_items: z
+          .array(
+            z.object({
+              price: z.union([z.number(), z.string()]).optional()
+            })
+          )
+          .optional()
+      })
+      .passthrough()
+      .optional(),
+    "Payment Amount": z.union([z.number(), z.string()]).optional(),
     "Mobile phone numbers for all people on membership:": z.string().optional(),
     "Email addresses for all people on membership:": z.string().optional(),
     "All names and family relationships": z.string().optional(),
@@ -114,6 +128,91 @@ const parseMembershipTier = (memberCount: string | undefined): MembershipTier =>
   }
 };
 
+const parsePaymentAmountDollars = (value: unknown): number | undefined => {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  const parsed =
+    typeof value === "number" ? value : Number.parseFloat(String(value).replace(/[$,]/g, "").trim());
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+
+  return parsed >= 1000 ? parsed / 100 : parsed;
+};
+
+const parseMembershipTierFromPaymentAmount = (amountDollars: number | undefined): MembershipTier | undefined => {
+  if (amountDollars === undefined) {
+    return undefined;
+  }
+
+  const roundedAmount = Math.round(amountDollars);
+
+  if (roundedAmount >= 730) {
+    return { tier: "FamilyLarge", maxMembers: 8 };
+  }
+
+  if (roundedAmount >= 580) {
+    return { tier: "FamilyPlus", maxMembers: 6 };
+  }
+
+  switch (roundedAmount) {
+    case 165:
+      return { tier: "Student", maxMembers: 1 };
+    case 240:
+      return { tier: "Adult", maxMembers: 1 };
+    case 290:
+      return { tier: "AdultPlusChild", maxMembers: 2 };
+    case 340:
+      return { tier: "Family3", maxMembers: 3 };
+    case 390:
+    case 430:
+      return { tier: "Family4", maxMembers: 4 };
+    case 480:
+    case 530:
+      return { tier: "Family5", maxMembers: 5 };
+    default:
+      return undefined;
+  }
+};
+
+const getPaymentAmountDollars = (payload: SignupPayload): number | undefined => {
+  const triggerData = payload.triggerData;
+  const candidates = [
+    payload["Payment Amount"],
+    triggerData?.["Payment Amount"],
+    triggerData?.payment_amount,
+    triggerData?.paymentAmount,
+    triggerData?.amount,
+    triggerData?.total_amount,
+    triggerData?.totalAmount,
+    payload.payment?.total_amount,
+    payload.payment?.line_items?.[0]?.price
+  ];
+
+  for (const candidate of candidates) {
+    const amount = parsePaymentAmountDollars(candidate);
+
+    if (amount !== undefined) {
+      return amount;
+    }
+  }
+
+  return undefined;
+};
+
+const resolveMembershipTier = (payload: SignupPayload): MembershipTier => {
+  const parsedFromMemberCount = parseMembershipTier(payload["Select the # of Members for your Membership"]);
+
+  if (parsedFromMemberCount.tier !== "unknown") {
+    return parsedFromMemberCount;
+  }
+
+  return parseMembershipTierFromPaymentAmount(getPaymentAmountDollars(payload)) ?? parsedFromMemberCount;
+};
+
 const parseFamilyMembers = (payload: SignupPayload, accountHolderFullName: string): ParsedFamilyMember[] => {
   const normalizedAccountHolderName = normalizeName(accountHolderFullName);
 
@@ -189,7 +288,7 @@ export const signupHandler: RequestHandler = async (req, res, next) => {
 
     const accountHolderFullName = `${input.first_name} ${input.last_name}`;
     const familyMembers = parseFamilyMembers(input, accountHolderFullName);
-    const membershipTier = parseMembershipTier(input["Select the # of Members for your Membership"]);
+    const membershipTier = resolveMembershipTier(input);
     const now = new Date();
     const endsAt = addOneYear(now);
     const emergencyContactName = getStringField(input, "Emergency Contact Full Name");
