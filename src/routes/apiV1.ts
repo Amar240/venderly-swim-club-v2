@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
+import { getNewYorkTodayBounds } from "../lib/timezone";
 import { HttpError } from "../middleware/errorHandler";
 import { jwtAuth, type StaffResponse } from "../middleware/jwtAuth";
 import { adminRouter } from "./admin";
@@ -327,6 +328,30 @@ membersRouter.get("/:id", async (req, res, next) => {
       throw new HttpError(404, "MEMBER_NOT_FOUND", "Member was not found");
     }
 
+    const todayBounds = getNewYorkTodayBounds();
+    const [currentGuestsAgg, guestsUsedTodayAgg] = await Promise.all([
+      prisma.checkinEvent.aggregate({
+        where: {
+          membershipId: person.membership.id,
+          isActive: true
+        },
+        _sum: { numGuests: true }
+      }),
+      prisma.checkinEvent.aggregate({
+        where: {
+          membershipId: person.membership.id,
+          eventType: "check_in",
+          checkedInAt: {
+            gte: todayBounds.start,
+            lt: todayBounds.end
+          }
+        },
+        _sum: { numGuests: true }
+      })
+    ]);
+    const currentGuestsInPool = currentGuestsAgg._sum.numGuests ?? 0;
+    const guestPassesUsedToday = guestsUsedTodayAgg._sum.numGuests ?? 0;
+
     res.json({
       member: {
         personId: person.id,
@@ -362,7 +387,9 @@ membersRouter.get("/:id", async (req, res, next) => {
           phoneVerified: person.membership.phoneVerified,
           paymentAmountCents: person.membership.paymentAmountCents,
           guestPassesTotal: person.membership.guestPassesTotal,
-          guestPassesUsed: person.membership.guestPassesUsed
+          guestPassesUsed: person.membership.guestPassesUsed,
+          currentGuestsInPool,
+          guestPassesUsedToday
         },
         family: person.membership.persons.map((familyMember) => ({
           personId: familyMember.id,

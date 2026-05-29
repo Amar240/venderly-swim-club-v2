@@ -197,6 +197,8 @@ export interface MemberDetail {
     paymentAmountCents: number;
     guestPassesTotal: number;
     guestPassesUsed: number;
+    currentGuestsInPool: number;
+    guestPassesUsedToday: number;
   };
   family: MemberDetailFamilyMember[];
   history: MemberHistoryEvent[];
@@ -215,6 +217,8 @@ export interface ManualCheckinResponse {
   membershipTier: string;
   maxMembers: number;
   currentlyCheckedIn: number;
+  guestsCheckedIn: number;
+  guestPassesRemaining: number;
 }
 
 export const postLogin = async (pin: string): Promise<LoginResponse> => {
@@ -225,8 +229,8 @@ export const postLogin = async (pin: string): Promise<LoginResponse> => {
   return response.data;
 };
 
-export const postManualCheckin = async (personId: string): Promise<ManualCheckinResponse> => {
-  const response = await api.post<ManualCheckinResponse>("/dashboard/checkin/manual", { personId });
+export const postManualCheckin = async (personId: string, numGuests = 0): Promise<ManualCheckinResponse> => {
+  const response = await api.post<ManualCheckinResponse>("/dashboard/checkin/manual", { personId, numGuests });
   return response.data;
 };
 

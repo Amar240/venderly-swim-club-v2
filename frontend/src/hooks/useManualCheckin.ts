@@ -4,6 +4,7 @@ import {
   postManualCheckin,
   type ActiveCheckinsResponse,
   type DashboardSummary,
+  type MemberDetailResponse,
   type ManualCheckinResponse
 } from "../lib/api";
 
@@ -12,26 +13,38 @@ export interface ManualCheckinVariables {
   firstName: string;
   lastName: string;
   membershipTier: string;
+  numGuests?: number;
+  detailPersonId?: string | null;
 }
 
 interface ManualCheckinContext {
   previousActive?: ActiveCheckinsResponse;
   previousSummary?: DashboardSummary;
+  previousDetail?: MemberDetailResponse;
+  detailPersonId?: string | null;
 }
 
 export const useManualCheckin = () => {
   const queryClient = useQueryClient();
 
   return useMutation<ManualCheckinResponse, Error, ManualCheckinVariables, ManualCheckinContext>({
-    mutationFn: ({ personId }) => postManualCheckin(personId),
+    mutationFn: ({ personId, numGuests = 0 }) => postManualCheckin(personId, numGuests),
     onMutate: async (person) => {
       await Promise.all([
         queryClient.cancelQueries({ queryKey: ["dashboard", "active"] }),
-        queryClient.cancelQueries({ queryKey: ["dashboard", "summary"] })
+        queryClient.cancelQueries({ queryKey: ["dashboard", "summary"] }),
+        person.detailPersonId
+          ? queryClient.cancelQueries({ queryKey: ["members", "detail", person.detailPersonId] })
+          : Promise.resolve()
       ]);
 
       const previousActive = queryClient.getQueryData<ActiveCheckinsResponse>(["dashboard", "active"]);
       const previousSummary = queryClient.getQueryData<DashboardSummary>(["dashboard", "summary"]);
+      const previousDetail = person.detailPersonId
+        ? queryClient.getQueryData<MemberDetailResponse>(["members", "detail", person.detailPersonId])
+        : undefined;
+      const numGuests = person.numGuests ?? 0;
+      const checkedInAt = new Date().toISOString();
 
       queryClient.setQueryData<ActiveCheckinsResponse>(["dashboard", "active"], (current) => {
         if (!current || current.persons.some((activePerson) => activePerson.personId === person.personId)) {
@@ -46,8 +59,8 @@ export const useManualCheckin = () => {
               firstName: person.firstName,
               lastName: person.lastName,
               membershipTier: person.membershipTier,
-              checkedInAt: new Date().toISOString(),
-              numGuests: 0,
+              checkedInAt,
+              numGuests,
               checkinEventId: `optimistic-${person.personId}`
             },
             ...current.persons
@@ -65,11 +78,41 @@ export const useManualCheckin = () => {
         return {
           ...current,
           currentlyInPool,
+          guestsToday: current.guestsToday + numGuests,
           capacityPercent: current.poolCapacity === 0 ? 0 : (currentlyInPool / current.poolCapacity) * 100
         };
       });
 
-      return { previousActive, previousSummary };
+      if (person.detailPersonId) {
+        queryClient.setQueryData<MemberDetailResponse>(["members", "detail", person.detailPersonId], (current) => {
+          if (!current) {
+            return current;
+          }
+
+          return {
+            member: {
+              ...current.member,
+              membership: {
+                ...current.member.membership,
+                guestPassesUsed: current.member.membership.guestPassesUsed + numGuests,
+                guestPassesUsedToday: current.member.membership.guestPassesUsedToday + numGuests,
+                currentGuestsInPool: current.member.membership.currentGuestsInPool + numGuests
+              },
+              family: current.member.family.map((familyMember) =>
+                familyMember.personId === person.personId
+                  ? {
+                      ...familyMember,
+                      isCurrentlyIn: true,
+                      checkedInAt
+                    }
+                  : familyMember
+              )
+            }
+          };
+        });
+      }
+
+      return { previousActive, previousSummary, previousDetail, detailPersonId: person.detailPersonId };
     },
     onError: (_error, _variables, context) => {
       if (context?.previousActive) {
@@ -80,17 +123,24 @@ export const useManualCheckin = () => {
         queryClient.setQueryData(["dashboard", "summary"], context.previousSummary);
       }
 
-      toast.error("Couldn't check in this member.");
+      if (context?.detailPersonId && context.previousDetail) {
+        queryClient.setQueryData(["members", "detail", context.detailPersonId], context.previousDetail);
+      }
+
+      toast.error("Couldn't check in");
     },
     onSuccess: (data) => {
       toast.success(`✓ Welcome ${data.personName}!`);
     },
-    onSettled: async () => {
+    onSettled: async (_data, _error, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["dashboard", "active"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard", "recent"] }),
-        queryClient.invalidateQueries({ queryKey: ["members"] })
+        queryClient.invalidateQueries({ queryKey: ["members"] }),
+        variables.detailPersonId
+          ? queryClient.invalidateQueries({ queryKey: ["members", "detail", variables.detailPersonId] })
+          : Promise.resolve()
       ]);
     }
   });

@@ -1,13 +1,14 @@
 import { format } from "date-fns";
-import { AlertTriangle, CalendarDays, CreditCard, MapPin, Phone, type LucideIcon } from "lucide-react";
+import { AlertTriangle, CalendarDays, CreditCard, Loader2, MapPin, Phone, Ticket, type LucideIcon } from "lucide-react";
 import { motion } from "framer-motion";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useManualSignout } from "../hooks/useDashboard";
 import { useManualCheckin } from "../hooks/useManualCheckin";
 import { useMemberDetail } from "../hooks/useMembers";
 import { useMotion } from "../hooks/useMotion";
-import type { MemberDetail, MemberDetailFamilyMember } from "../lib/api";
+import type { MemberDetail, MemberDetailFamilyMember, MemberDetailResponse } from "../lib/api";
 import { slideInRight } from "../lib/motion";
 import { cn } from "../lib/utils";
 import { GuestPassBar } from "./GuestPassBar";
@@ -64,13 +65,18 @@ export const MemberDetailSheet = ({
 const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail; clickedPersonId: string | null }) => {
   const accountHolder = member.family.find((person) => person.isPrimary) ?? member;
   const [localStatus, setLocalStatus] = useState<Record<string, boolean>>({});
+  const [guestCounts, setGuestCounts] = useState<Record<string, number>>({});
+  const [localActiveGuests, setLocalActiveGuests] = useState<Record<string, number>>({});
   const clickedRowRef = useRef<HTMLDivElement | null>(null);
   const { reduced } = useMotion();
   const manualCheckin = useManualCheckin();
   const manualSignout = useManualSignout();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     setLocalStatus({});
+    setGuestCounts({});
+    setLocalActiveGuests({});
   }, [member.membership.membershipId]);
 
   useEffect(() => {
@@ -81,6 +87,8 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
 
   const address = formatAddress(member.membership);
   const allergyRows = member.family.filter((person) => person.allergies.trim().length > 0);
+  const guestPassesRemaining = Math.max(0, member.membership.guestPassesTotal - member.membership.guestPassesUsed);
+  const guestsFor = (personId: string): number => guestCounts[personId] ?? 0;
 
   const family = useMemo(
     () =>
@@ -92,19 +100,25 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
   );
 
   const checkIn = (person: MemberDetailFamilyMember) => {
+    const numGuests = Math.min(guestsFor(person.personId), guestPassesRemaining);
+
     setLocalStatus((current) => ({ ...current, [person.personId]: true }));
     manualCheckin.mutate(
       {
         personId: person.personId,
         firstName: person.firstName,
         lastName: person.lastName,
-        membershipTier: member.membership.tier
+        membershipTier: member.membership.tier,
+        numGuests,
+        detailPersonId: clickedPersonId
       },
       {
-        onSuccess: (result) => toast.success(result.message),
+        onSuccess: () => {
+          setGuestCounts((current) => ({ ...current, [person.personId]: 0 }));
+          setLocalActiveGuests((current) => ({ ...current, [person.personId]: numGuests }));
+        },
         onError: () => {
           setLocalStatus((current) => ({ ...current, [person.personId]: person.isCurrentlyIn }));
-          toast.error("Could not check in this member.");
         }
       }
     );
@@ -112,10 +126,39 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
 
   const signOut = (person: MemberDetailFamilyMember) => {
     setLocalStatus((current) => ({ ...current, [person.personId]: false }));
+    const guestsToRemove = localActiveGuests[person.personId] ?? 0;
+
+    if (guestsToRemove > 0 && clickedPersonId) {
+      queryClient.setQueryData<MemberDetailResponse>(["members", "detail", clickedPersonId], (current) =>
+        current
+          ? {
+              member: {
+                ...current.member,
+                membership: {
+                  ...current.member.membership,
+                  currentGuestsInPool: Math.max(0, current.member.membership.currentGuestsInPool - guestsToRemove)
+                },
+                family: current.member.family.map((familyMember) =>
+                  familyMember.personId === person.personId
+                    ? { ...familyMember, isCurrentlyIn: false, checkedInAt: null }
+                    : familyMember
+                )
+              }
+            }
+          : current
+      );
+    }
+
     manualSignout.mutate(person.personId, {
-      onSuccess: (result) => toast.success(result.message),
+      onSuccess: (result) => {
+        setLocalActiveGuests((current) => ({ ...current, [person.personId]: 0 }));
+        toast.success(result.message);
+      },
       onError: () => {
         setLocalStatus((current) => ({ ...current, [person.personId]: person.isCurrentlyIn }));
+        if (guestsToRemove > 0 && clickedPersonId) {
+          queryClient.invalidateQueries({ queryKey: ["members", "detail", clickedPersonId] }).catch(() => {});
+        }
         toast.error("Could not sign out this member.");
       }
     });
@@ -134,7 +177,11 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
       </div>
 
       <div className="rounded-xl border border-brand-border bg-brand-background/70 p-4">
-        <GuestPassBar total={member.membership.guestPassesTotal} used={member.membership.guestPassesUsed} />
+        <GuestPassBar
+          total={member.membership.guestPassesTotal}
+          used={member.membership.guestPassesUsed}
+          usedToday={member.membership.guestPassesUsedToday}
+        />
       </div>
 
       <section className="space-y-3">
@@ -162,6 +209,33 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
                   <p className="text-sm text-slate-500">
                     {person.isCurrentlyIn && person.checkedInAt ? `since ${format(new Date(person.checkedInAt), "h:mm a")}` : person.phone || person.email}
                   </p>
+                  {!person.isCurrentlyIn ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Guests:</span>
+                      {[0, 1, 2, 3, 4, 5].map((count) => {
+                        const isSelected = guestsFor(person.personId) === count;
+                        const isDisabled = count > guestPassesRemaining;
+
+                        return (
+                          <button
+                            key={count}
+                            type="button"
+                            disabled={isDisabled}
+                            onClick={() => setGuestCounts((current) => ({ ...current, [person.personId]: count }))}
+                            className={cn(
+                              "h-9 w-9 rounded-md text-sm font-semibold tabular-nums transition-colors",
+                              isSelected
+                                ? "bg-brand-primary text-white"
+                                : "border border-brand-border bg-white text-slate-700 hover:bg-brand-background",
+                              isDisabled && "cursor-not-allowed opacity-40 hover:bg-white"
+                            )}
+                          >
+                            {count}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
                 {person.isCurrentlyIn ? (
                   <Button type="button" variant="outline" disabled={isBusy} onClick={() => signOut(person)} className="shrink-0">
@@ -169,12 +243,19 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
                   </Button>
                 ) : (
                   <Button type="button" disabled={isBusy} onClick={() => checkIn(person)} className="shrink-0 bg-brand-primary hover:bg-brand-primaryHover">
+                    {manualCheckin.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     Check In
                   </Button>
                 )}
               </div>
             );
           })}
+          {member.membership.currentGuestsInPool > 0 ? (
+            <div className="mt-2 flex items-center gap-2 rounded-lg bg-brand-background/60 px-4 py-3 text-sm text-slate-600">
+              <Ticket className="h-4 w-4 text-brand-primary" aria-hidden />
+              <span>+{member.membership.currentGuestsInPool} guests currently in pool</span>
+            </div>
+          ) : null}
         </div>
       </section>
 
