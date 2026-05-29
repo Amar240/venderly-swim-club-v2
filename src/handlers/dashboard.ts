@@ -46,12 +46,12 @@ export const getDashboardSummary: RequestHandler = async (_req, res, next) => {
     const clubId = getStaffClubId(staffResponse);
     const todayBounds = getNewYorkTodayBounds();
 
-    const [club, visitedToday, currentlyInPool, guestsToday, newMembersToday] = await Promise.all([
+    const [club, visitedTodayAgg, currentlyInPoolAgg, guestsToday, newMembersToday] = await Promise.all([
       prisma.club.findUnique({
         where: { id: clubId },
         select: { maxCapacity: true }
       }),
-      prisma.checkinEvent.count({
+      prisma.checkinEvent.aggregate({
         where: {
           clubId,
           eventType: "check_in",
@@ -59,13 +59,17 @@ export const getDashboardSummary: RequestHandler = async (_req, res, next) => {
             gte: todayBounds.start,
             lt: todayBounds.end
           }
-        }
+        },
+        _count: { _all: true },
+        _sum: { numGuests: true }
       }),
-      prisma.checkinEvent.count({
+      prisma.checkinEvent.aggregate({
         where: {
           clubId,
           isActive: true
-        }
+        },
+        _count: { _all: true },
+        _sum: { numGuests: true }
       }),
       prisma.checkinEvent.aggregate({
         where: {
@@ -94,10 +98,20 @@ export const getDashboardSummary: RequestHandler = async (_req, res, next) => {
     }
 
     const poolCapacity = club.maxCapacity;
+    const visitedTodayMembers = visitedTodayAgg._count._all ?? 0;
+    const visitedTodayGuests = visitedTodayAgg._sum.numGuests ?? 0;
+    const visitedToday = visitedTodayMembers + visitedTodayGuests;
+    const currentlyInPoolMembers = currentlyInPoolAgg._count._all ?? 0;
+    const currentlyInPoolGuests = currentlyInPoolAgg._sum.numGuests ?? 0;
+    const currentlyInPool = currentlyInPoolMembers + currentlyInPoolGuests;
 
     res.json({
       visitedToday,
+      visitedTodayMembers,
+      visitedTodayGuests,
       currentlyInPool,
+      currentlyInPoolMembers,
+      currentlyInPoolGuests,
       guestsToday: guestsToday._sum.numGuests ?? 0,
       newMembersToday,
       poolCapacity,

@@ -39,7 +39,11 @@ export interface LoginResponse {
 
 export interface DashboardSummary {
   visitedToday: number;
+  visitedTodayMembers: number;
+  visitedTodayGuests: number;
   currentlyInPool: number;
+  currentlyInPoolMembers: number;
+  currentlyInPoolGuests: number;
   guestsToday: number;
   newMembersToday: number;
   poolCapacity: number;

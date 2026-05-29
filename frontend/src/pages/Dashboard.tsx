@@ -70,12 +70,21 @@ export const Dashboard = () => {
             <div>
               <p className="text-sm font-semibold uppercase tracking-wide text-brand-primary">Currently in pool</p>
               {summary ? (
-                <h1 className="mt-2 text-5xl font-bold tracking-tight text-brand-navy md:text-6xl">
-                  <AnimatedNumber value={summary.currentlyInPool} reduced={reduced} />
-                  <span className="ml-3 text-2xl font-semibold text-slate-500">
-                    {summary.currentlyInPool === 1 ? "swimmer" : "swimmers"}
-                  </span>
-                </h1>
+                <>
+                  <h1 className="mt-2 text-5xl font-bold tracking-tight text-brand-navy md:text-6xl">
+                    <AnimatedNumber value={summary.currentlyInPool} reduced={reduced} />
+                    <span className="ml-3 text-2xl font-semibold text-slate-500">
+                      {summary.currentlyInPool === 1 ? "swimmer" : "swimmers"}
+                    </span>
+                  </h1>
+                  {summary.currentlyInPoolGuests > 0 ? (
+                    <p className="mt-1 text-sm text-slate-500">
+                      {summary.currentlyInPoolMembers} member{summary.currentlyInPoolMembers === 1 ? "" : "s"}
+                      {" · "}
+                      {summary.currentlyInPoolGuests} guest{summary.currentlyInPoolGuests === 1 ? "" : "s"}
+                    </p>
+                  ) : null}
+                </>
               ) : (
                 <Skeleton className="mt-3 h-16 w-72" />
               )}

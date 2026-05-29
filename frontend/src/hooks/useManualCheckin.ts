@@ -73,11 +73,16 @@ export const useManualCheckin = () => {
           return current;
         }
 
-        const currentlyInPool = current.currentlyInPool + 1;
+        const currentlyInPool = current.currentlyInPool + 1 + numGuests;
 
         return {
           ...current,
+          visitedToday: current.visitedToday + 1 + numGuests,
+          visitedTodayMembers: current.visitedTodayMembers + 1,
+          visitedTodayGuests: current.visitedTodayGuests + numGuests,
           currentlyInPool,
+          currentlyInPoolMembers: current.currentlyInPoolMembers + 1,
+          currentlyInPoolGuests: current.currentlyInPoolGuests + numGuests,
           guestsToday: current.guestsToday + numGuests,
           capacityPercent: current.poolCapacity === 0 ? 0 : (currentlyInPool / current.poolCapacity) * 100
         };
