@@ -104,7 +104,12 @@ const splitFullName = (fullName: string): { firstName: string; lastName: string 
   };
 };
 
-const normalizeName = (fullName: string): string => fullName.trim().replace(/\s+/g, " ").toLowerCase();
+const normalizeName = (fullName: string): string =>
+  fullName
+    .trim()
+    .replace(/[.,;:\-]/g, "")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 
 const getStringField = (payload: SignupPayload, fieldName: string): string | undefined => {
   const value = payload[fieldName];
