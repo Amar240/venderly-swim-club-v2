@@ -25,7 +25,7 @@ export const GuestPassBar = ({ total, used, usedToday = 0 }: { total: number; us
         {Array.from({ length: Math.max(segments, 1) }, (_, index) => (
           <span
             key={index}
-            className={cn("h-2 rounded-full", index < filledSegments ? colorClass : "bg-slate-200 dark:bg-slate-600")}
+            className={cn("h-2 rounded-full", index < filledSegments ? colorClass : "bg-slate-200")}
           />
         ))}
       </div>

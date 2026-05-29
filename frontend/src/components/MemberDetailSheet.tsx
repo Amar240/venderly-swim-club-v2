@@ -28,6 +28,36 @@ const hasReportedAllergy = (text: string | null | undefined): boolean => {
   return !NO_ALLERGY_PATTERNS.test(trimmed);
 };
 
+const renderAllergyRows = (member: MemberDetail) => {
+  const withAllergies = (member.family ?? [member]).filter((person) => hasReportedAllergy(person.allergies));
+
+  if (withAllergies.length === 0) {
+    return null;
+  }
+
+  const allergiesSet = new Set(withAllergies.map((person) => person.allergies.trim().toLowerCase()));
+
+  if (allergiesSet.size === 1) {
+    return (
+      <div className="rounded-lg border border-brand-border bg-white px-4 py-3">
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Household allergies / notes
+        </div>
+        <div className="mt-1 text-sm text-brand-navy">{withAllergies[0].allergies}</div>
+      </div>
+    );
+  }
+
+  return withAllergies.map((person) => (
+    <div key={person.personId} className="rounded-lg border border-brand-border bg-white px-4 py-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Allergies / Notes: {person.firstName} {person.lastName}
+      </div>
+      <div className="mt-1 text-sm text-brand-navy">{person.allergies}</div>
+    </div>
+  ));
+};
+
 export const MemberDetailSheet = ({
   personId,
   open,
@@ -103,7 +133,6 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
   }, [clickedPersonId, reduced]);
 
   const address = formatAddress(member.membership);
-  const allergyRows = member.family.filter((person) => hasReportedAllergy(person.allergies));
   const guestPassesRemaining = Math.max(0, member.membership.guestPassesTotal - member.membership.guestPassesUsed);
   const canDecrementGuests = guestCount > 0;
   const canIncrementGuests = guestCount < guestPassesRemaining;
@@ -290,17 +319,7 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
       <section className="space-y-3">
         <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Details</h3>
         <div className="space-y-3 rounded-xl border border-brand-border p-4">
-          {allergyRows.map((person) => (
-            <div
-              key={person.personId}
-              className="rounded-lg border border-brand-border bg-white px-4 py-3"
-            >
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Allergies / Notes: {person.firstName} {person.lastName}
-              </div>
-              <div className="mt-1 text-sm text-brand-navy">{person.allergies}</div>
-            </div>
-          ))}
+          {renderAllergyRows(member)}
           <DetailRow
             icon={Phone}
             label="Emergency"

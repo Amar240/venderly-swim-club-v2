@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { LogOut, Moon, Settings, Volume2, Waves } from "lucide-react";
+import { LogOut, Settings, Volume2, Waves } from "lucide-react";
 import { useLogout } from "../hooks/useAuth";
 import { useDashboardSummary } from "../hooks/useDashboard";
 import { useUiPrefs } from "../hooks/useUiPrefs";
@@ -28,7 +28,7 @@ import { Label } from "./ui/label";
 
 export const SettingsMenu = () => {
   const logout = useLogout();
-  const { darkMode, toggleDarkMode, soundEnabled, toggleSound } = useUiPrefs();
+  const { soundEnabled, toggleSound } = useUiPrefs();
   const [capacityDialogOpen, setCapacityDialogOpen] = useState(false);
   const [capacityInput, setCapacityInput] = useState("");
   const queryClient = useQueryClient();
@@ -75,7 +75,6 @@ export const SettingsMenu = () => {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
-          <ToggleRow icon={Moon} label="Dark mode" checked={darkMode} onToggle={toggleDarkMode} />
           <ToggleRow icon={Volume2} label="Sound" checked={soundEnabled} onToggle={toggleSound} />
           <DropdownMenuSeparator />
           <DropdownMenuItem
@@ -138,7 +137,7 @@ const ToggleRow = ({
   checked,
   onToggle
 }: {
-  icon: typeof Moon;
+  icon: typeof Volume2;
   label: string;
   checked: boolean;
   onToggle: () => void;

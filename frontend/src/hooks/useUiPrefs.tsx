@@ -1,14 +1,12 @@
 import { createContext, type PropsWithChildren, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 type UiPrefs = {
-  darkMode: boolean;
-  toggleDarkMode: () => void;
   soundEnabled: boolean;
   toggleSound: () => void;
   playChime: () => void;
 };
 
-const KEYS = { dark: "venderly.darkMode", sound: "venderly.sound" };
+const KEYS = { sound: "venderly.sound" };
 
 const UiPrefsContext = createContext<UiPrefs | null>(null);
 
@@ -21,14 +19,8 @@ const readStoredBoolean = (key: string): boolean => {
 };
 
 export const UiPrefsProvider = ({ children }: PropsWithChildren) => {
-  const [darkMode, setDarkMode] = useState(() => readStoredBoolean(KEYS.dark));
   const [soundEnabled, setSoundEnabled] = useState(() => readStoredBoolean(KEYS.sound));
   const audioContextRef = useRef<AudioContext | null>(null);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", darkMode);
-    window.localStorage.setItem(KEYS.dark, String(darkMode));
-  }, [darkMode]);
 
   useEffect(() => {
     window.localStorage.setItem(KEYS.sound, String(soundEnabled));
@@ -36,8 +28,6 @@ export const UiPrefsProvider = ({ children }: PropsWithChildren) => {
 
   const value = useMemo<UiPrefs>(
     () => ({
-      darkMode,
-      toggleDarkMode: () => setDarkMode((current) => !current),
       soundEnabled,
       toggleSound: () => setSoundEnabled((current) => !current),
       playChime: () => {
@@ -71,7 +61,7 @@ export const UiPrefsProvider = ({ children }: PropsWithChildren) => {
         }
       }
     }),
-    [darkMode, soundEnabled]
+    [soundEnabled]
   );
 
   return <UiPrefsContext.Provider value={value}>{children}</UiPrefsContext.Provider>;
