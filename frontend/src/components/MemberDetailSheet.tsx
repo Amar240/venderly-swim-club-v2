@@ -65,7 +65,7 @@ export const MemberDetailSheet = ({
 const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail; clickedPersonId: string | null }) => {
   const accountHolder = member.family.find((person) => person.isPrimary) ?? member;
   const [localStatus, setLocalStatus] = useState<Record<string, boolean>>({});
-  const [guestCounts, setGuestCounts] = useState<Record<string, number>>({});
+  const [guestCount, setGuestCount] = useState(0);
   const [localActiveGuests, setLocalActiveGuests] = useState<Record<string, number>>({});
   const clickedRowRef = useRef<HTMLDivElement | null>(null);
   const { reduced } = useMotion();
@@ -75,7 +75,7 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
 
   useEffect(() => {
     setLocalStatus({});
-    setGuestCounts({});
+    setGuestCount(0);
     setLocalActiveGuests({});
   }, [member.membership.membershipId]);
 
@@ -88,7 +88,8 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
   const address = formatAddress(member.membership);
   const allergyRows = member.family.filter((person) => person.allergies.trim().length > 0);
   const guestPassesRemaining = Math.max(0, member.membership.guestPassesTotal - member.membership.guestPassesUsed);
-  const guestsFor = (personId: string): number => guestCounts[personId] ?? 0;
+  const canDecrementGuests = guestCount > 0;
+  const canIncrementGuests = guestCount < guestPassesRemaining;
 
   const family = useMemo(
     () =>
@@ -100,7 +101,7 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
   );
 
   const checkIn = (person: MemberDetailFamilyMember) => {
-    const numGuests = Math.min(guestsFor(person.personId), guestPassesRemaining);
+    const numGuests = Math.min(guestCount, guestPassesRemaining);
 
     setLocalStatus((current) => ({ ...current, [person.personId]: true }));
     manualCheckin.mutate(
@@ -114,7 +115,7 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
       },
       {
         onSuccess: () => {
-          setGuestCounts((current) => ({ ...current, [person.personId]: 0 }));
+          setGuestCount(0);
           setLocalActiveGuests((current) => ({ ...current, [person.personId]: numGuests }));
         },
         onError: () => {
@@ -184,6 +185,43 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
         />
       </div>
 
+      {guestPassesRemaining > 0 ? (
+        <div className="rounded-lg border border-brand-border bg-white p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-brand-navy">Add guests</p>
+              <p className="text-xs text-slate-500">
+                Up to {guestPassesRemaining} guest{guestPassesRemaining === 1 ? "" : "s"} available
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                aria-label="Decrease guests"
+                disabled={!canDecrementGuests}
+                onClick={() => setGuestCount((count) => Math.max(0, count - 1))}
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-brand-border text-xl font-semibold text-brand-navy hover:bg-brand-background disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                -
+              </button>
+              <span className="min-w-[3ch] text-center text-2xl font-bold tabular-nums text-brand-navy">{guestCount}</span>
+              <button
+                type="button"
+                aria-label="Increase guests"
+                disabled={!canIncrementGuests}
+                onClick={() => setGuestCount((count) => Math.min(guestPassesRemaining, count + 1))}
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-brand-primary bg-brand-primary text-xl font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                +
+              </button>
+            </div>
+          </div>
+          {guestCount > 0 ? (
+            <p className="mt-2 text-xs text-slate-500">Will apply to the next family member checked in.</p>
+          ) : null}
+        </div>
+      ) : null}
+
       <section className="space-y-3">
         <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Family members</h3>
         <div className="space-y-3">
@@ -209,33 +247,6 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
                   <p className="text-sm text-slate-500">
                     {person.isCurrentlyIn && person.checkedInAt ? `since ${format(new Date(person.checkedInAt), "h:mm a")}` : person.phone || person.email}
                   </p>
-                  {!person.isCurrentlyIn ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Guests:</span>
-                      {[0, 1, 2, 3, 4, 5].map((count) => {
-                        const isSelected = guestsFor(person.personId) === count;
-                        const isDisabled = count > guestPassesRemaining;
-
-                        return (
-                          <button
-                            key={count}
-                            type="button"
-                            disabled={isDisabled}
-                            onClick={() => setGuestCounts((current) => ({ ...current, [person.personId]: count }))}
-                            className={cn(
-                              "h-9 w-9 rounded-md text-sm font-semibold tabular-nums transition-colors",
-                              isSelected
-                                ? "bg-brand-primary text-white"
-                                : "border border-brand-border bg-white text-slate-700 hover:bg-brand-background",
-                              isDisabled && "cursor-not-allowed opacity-40 hover:bg-white"
-                            )}
-                          >
-                            {count}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
                 </div>
                 {person.isCurrentlyIn ? (
                   <Button type="button" variant="outline" disabled={isBusy} onClick={() => signOut(person)} className="shrink-0">
