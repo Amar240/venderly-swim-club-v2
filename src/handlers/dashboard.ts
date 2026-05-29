@@ -21,12 +21,19 @@ const searchQuerySchema = z.object({
   q: z.string().trim().min(2)
 });
 
-const manualSignoutSchema = z.object({
-  personId: z.string().min(1)
-});
+const manualSignoutSchema = z
+  .object({
+    personId: z.string().min(1).optional(),
+    membershipId: z.string().min(1).optional(),
+    scope: z.enum(["person", "membership"]).default("person")
+  })
+  .refine((value) => (value.scope === "person" && value.personId) || (value.scope === "membership" && value.membershipId), {
+    message: "personId required for scope=person, membershipId for scope=membership"
+  });
 
 const manualCheckinSchema = z.object({
-  personId: z.string().min(1)
+  personId: z.string().min(1),
+  numGuests: z.number().int().min(0).max(10).optional().default(0)
 });
 
 const getStaffClubId = (res: StaffResponse): string => res.locals.staff.clubId;
@@ -313,7 +320,71 @@ export const manualSignout: RequestHandler = async (req, res, next) => {
   try {
     const staffResponse = res as StaffResponse;
     const clubId = getStaffClubId(staffResponse);
-    const { personId } = manualSignoutSchema.parse(req.body);
+    const { personId, membershipId, scope } = manualSignoutSchema.parse(req.body);
+
+    if (scope === "membership") {
+      if (!membershipId) {
+        throw new HttpError(400, "MEMBERSHIP_ID_REQUIRED", "membershipId is required");
+      }
+
+      const membership = await prisma.membership.findFirst({
+        where: {
+          id: membershipId,
+          clubId
+        },
+        select: { id: true }
+      });
+
+      if (!membership) {
+        throw new HttpError(404, "MEMBERSHIP_NOT_FOUND", "Membership was not found");
+      }
+
+      const activeCheckins = await prisma.checkinEvent.findMany({
+        where: {
+          clubId,
+          membershipId: membership.id,
+          isActive: true
+        },
+        select: {
+          id: true,
+          person: {
+            select: {
+              firstName: true,
+              lastName: true
+            }
+          }
+        }
+      });
+
+      await prisma.$transaction(async (transaction) => {
+        await transaction.checkinEvent.updateMany({
+          where: {
+            id: {
+              in: activeCheckins.map((checkin) => checkin.id)
+            }
+          },
+          data: {
+            isActive: false,
+            signedOutAt: new Date()
+          }
+        });
+      });
+
+      const signedOut = activeCheckins.map((checkin) => fullName(checkin.person));
+      const count = signedOut.length;
+
+      res.json({
+        success: true,
+        message: `Signed out ${count} ${count === 1 ? "person" : "people"}`,
+        signedOut
+      });
+      return;
+    }
+
+    if (!personId) {
+      throw new HttpError(400, "PERSON_ID_REQUIRED", "personId is required");
+    }
+
     const activeCheckin = await prisma.checkinEvent.findFirst({
       where: {
         clubId,
@@ -359,7 +430,7 @@ export const manualCheckin: RequestHandler = async (req, res, next) => {
     const staffResponse = res as StaffResponse;
     const clubId = getStaffClubId(staffResponse);
     const staffId = staffResponse.locals.staff.id;
-    const { personId } = manualCheckinSchema.parse(req.body);
+    const { personId, numGuests } = manualCheckinSchema.parse(req.body);
 
     const person = await prisma.person.findFirst({
       where: { id: personId, clubId },
@@ -373,7 +444,9 @@ export const manualCheckin: RequestHandler = async (req, res, next) => {
             id: true,
             status: true,
             tier: true,
-            maxMembers: true
+            maxMembers: true,
+            guestPassesTotal: true,
+            guestPassesUsed: true
           }
         }
       }
@@ -400,6 +473,12 @@ export const manualCheckin: RequestHandler = async (req, res, next) => {
       throw new HttpError(409, "ALREADY_CHECKED_IN", "Member is already checked in");
     }
 
+    const guestPassesRemaining = person.membership.guestPassesTotal - person.membership.guestPassesUsed;
+
+    if (numGuests > 0 && numGuests > guestPassesRemaining) {
+      throw new HttpError(403, "INSUFFICIENT_GUEST_PASSES", "Not enough guest passes available");
+    }
+
     const activeMembershipCheckins = await prisma.checkinEvent.count({
       where: { membershipId: person.membershipId, isActive: true }
     });
@@ -408,18 +487,34 @@ export const manualCheckin: RequestHandler = async (req, res, next) => {
       throw new HttpError(403, "MEMBERSHIP_AT_CAPACITY", "Membership is at capacity");
     }
 
-    const checkinEvent = await prisma.checkinEvent.create({
-      data: {
-        clubId,
-        personId: person.id,
-        membershipId: person.membershipId,
-        staffId,
-        eventType: "check_in",
-        isActive: true,
-        checkedInAt: new Date(),
-        source: "staff_manual"
-      },
-      select: { id: true, checkedInAt: true }
+    const checkinEvent = await prisma.$transaction(async (transaction) => {
+      const event = await transaction.checkinEvent.create({
+        data: {
+          clubId,
+          personId: person.id,
+          membershipId: person.membershipId,
+          staffId,
+          eventType: "check_in",
+          isActive: true,
+          checkedInAt: new Date(),
+          numGuests,
+          source: "staff_manual"
+        },
+        select: { id: true, checkedInAt: true }
+      });
+
+      if (numGuests > 0) {
+        await transaction.membership.update({
+          where: { id: person.membership.id },
+          data: {
+            guestPassesUsed: {
+              increment: numGuests
+            }
+          }
+        });
+      }
+
+      return event;
     });
 
     res.json({
@@ -430,7 +525,9 @@ export const manualCheckin: RequestHandler = async (req, res, next) => {
       checkedInAt: checkinEvent.checkedInAt.toISOString(),
       membershipTier: person.membership.tier,
       maxMembers: person.membership.maxMembers,
-      currentlyCheckedIn: activeMembershipCheckins + 1
+      currentlyCheckedIn: activeMembershipCheckins + 1,
+      guestsCheckedIn: numGuests,
+      guestPassesRemaining: person.membership.guestPassesTotal - (person.membership.guestPassesUsed + numGuests)
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {

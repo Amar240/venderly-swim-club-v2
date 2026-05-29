@@ -27,7 +27,12 @@ const signupSchema = z
     "Include name(s) & age(s) of your child/children:": z.string().optional(),
     "Emergency Contact Full Name": z.string().optional(),
     "Emergency Contact Mobile Number": z.string().optional(),
-    "Emergency Contact Email": z.string().optional(),
+    "Emergency Contact Email": z.string().email().optional(),
+    "Street Address": z.string().optional(),
+    "City": z.string().optional(),
+    "State": z.string().optional(),
+    "Country": z.string().optional(),
+    "Postal Code": z.string().optional(),
     "Do you require any special accommodations? If so, please describe:": z.string().optional(),
     "Select the # of Members for your Membership": z.string().optional()
   })
@@ -184,6 +189,12 @@ export const signupHandler: RequestHandler = async (req, res, next) => {
     const endsAt = addOneYear(now);
     const emergencyContactName = getStringField(input, "Emergency Contact Full Name");
     const emergencyContactPhone = cleanPhoneNumber(getStringField(input, "Emergency Contact Mobile Number"));
+    const emergencyContactEmail = getStringField(input, "Emergency Contact Email");
+    const addressStreet = getStringField(input, "Street Address") ?? null;
+    const addressCity = getStringField(input, "City") ?? null;
+    const addressState = getStringField(input, "State") ?? null;
+    const addressCountry = getStringField(input, "Country") ?? null;
+    const addressPostalCode = getStringField(input, "Postal Code") ?? null;
     const allergies = getStringField(input, "Do you require any special accommodations? If so, please describe:");
     const paymentData = input.triggerData as Prisma.InputJsonObject | undefined;
     const paymentStatus = getPaymentStatus(input.triggerData);
@@ -211,7 +222,12 @@ export const signupHandler: RequestHandler = async (req, res, next) => {
               submittedAt: now,
               startsAt: now,
               endsAt,
-              guestPassesTotal
+              guestPassesTotal,
+              addressStreet,
+              addressCity,
+              addressState,
+              addressCountry,
+              addressPostalCode
             },
             select: { id: true }
           })
@@ -227,7 +243,12 @@ export const signupHandler: RequestHandler = async (req, res, next) => {
               submittedAt: now,
               startsAt: now,
               endsAt,
-              guestPassesTotal
+              guestPassesTotal,
+              addressStreet,
+              addressCity,
+              addressState,
+              addressCountry,
+              addressPostalCode
             },
             select: { id: true }
           });
@@ -261,6 +282,7 @@ export const signupHandler: RequestHandler = async (req, res, next) => {
           relationship: "self",
           emergencyContactName,
           emergencyContactPhone,
+          emergencyContactEmail: emergencyContactEmail ?? null,
           allergies
         },
         update: {
@@ -273,6 +295,7 @@ export const signupHandler: RequestHandler = async (req, res, next) => {
           relationship: "self",
           emergencyContactName,
           emergencyContactPhone,
+          emergencyContactEmail: emergencyContactEmail ?? null,
           allergies
         }
       });
@@ -306,6 +329,7 @@ export const signupHandler: RequestHandler = async (req, res, next) => {
               relationship: "family_member",
               emergencyContactName,
               emergencyContactPhone,
+              emergencyContactEmail: emergencyContactEmail ?? null,
               allergies
             }
           });
@@ -324,6 +348,7 @@ export const signupHandler: RequestHandler = async (req, res, next) => {
             relationship: "family_member",
             emergencyContactName,
             emergencyContactPhone,
+            emergencyContactEmail: emergencyContactEmail ?? null,
             allergies
           }
         });

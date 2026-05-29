@@ -14,18 +14,31 @@ const checkInWebhookSchema = z
       .optional(),
     location_id: z.string().min(1).optional(),
     contact_id: z.string().optional(),
-    first_name: z.string().min(1),
+    first_name: z.string().optional().default(""),
     last_name: z.string().optional().default(""),
     email: z.string().email(),
     phone: z.string().optional(),
     "Membership Name": z.string().optional(),
     "Number of members attending": z.string().optional(),
     "Any guests?": z.string().optional(),
+    "# of Additional Members Signing In Now": z.union([z.string(), z.number()]).optional(),
+    "Full Name of 1st Member": z.string().optional(),
+    "Full Name of 2nd Member": z.string().optional(),
+    "Full Name of 3rd Member": z.string().optional(),
+    "Full Name of 4th Member": z.string().optional(),
+    "Full Name of 5th Member": z.string().optional(),
+    "Full Name of 6th Member": z.string().optional(),
+    "Full Name of 7th Member": z.string().optional(),
+    "Full Name of 8th Member": z.string().optional(),
+    "# of guests entering": z.union([z.string(), z.number()]).optional(),
+    "Phone(Membership holder phone)": z.string().optional(),
     "Select Option:": z.string().optional().default("Sign-In")
   })
   .catchall(z.unknown());
 
 type CheckInWebhookPayload = z.infer<typeof checkInWebhookSchema>;
+
+const FAMILY_ORDINALS = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"] as const;
 
 type MembershipPerson = {
   id: string;
@@ -45,6 +58,25 @@ type FoundPerson = {
     tier: string;
     maxMembers: number;
     persons: MembershipPerson[];
+  };
+};
+
+type BatchPerson = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  checkinEvents: { id: string }[];
+};
+
+type FoundHousehold = {
+  membership: {
+    id: string;
+    status: string;
+    tier: string;
+    maxMembers: number;
+    guestPassesTotal: number;
+    guestPassesUsed: number;
+    persons: BatchPerson[];
   };
 };
 
@@ -70,6 +102,22 @@ const parseGuestCount = (rawGuests: string | undefined): number => {
 
   const match = rawGuests.match(/\d+/);
   return match ? Number.parseInt(match[0], 10) : 0;
+};
+
+const collectNamedMembers = (input: CheckInWebhookPayload): string[] =>
+  FAMILY_ORDINALS.map((ordinal) => input[`Full Name of ${ordinal} Member`])
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim());
+
+const parseBatchGuestCount = (input: CheckInWebhookPayload): number => {
+  const guestsYes = String(input["Any guests?"] ?? "").trim().toLowerCase() === "yes";
+
+  if (!guestsYes) {
+    return 0;
+  }
+
+  const parsed = Number.parseInt(String(input["# of guests entering"] ?? "0"), 10);
+  return Number.isNaN(parsed) ? 0 : Math.max(parsed, 0);
 };
 
 const findPersonByEmail = async (clubId: string, email: string, firstName: string): Promise<FoundPerson | null> => {
@@ -297,6 +345,62 @@ const findMemberForCheckIn = async (clubId: string, input: CheckInWebhookPayload
   return findPersonByMembershipName(clubId, input.first_name, input["Membership Name"]);
 };
 
+const selectBatchHousehold = {
+  membership: {
+    select: {
+      id: true,
+      status: true,
+      tier: true,
+      maxMembers: true,
+      guestPassesTotal: true,
+      guestPassesUsed: true,
+      persons: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          checkinEvents: {
+            where: { isActive: true },
+            select: { id: true },
+            take: 1
+          }
+        },
+        orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }]
+      }
+    }
+  }
+} satisfies Prisma.PersonSelect;
+
+const findHouseholdForBatch = async (clubId: string, input: CheckInWebhookPayload): Promise<FoundHousehold | null> => {
+  const emailMatch = await prisma.person.findFirst({
+    where: {
+      clubId,
+      email: input.email
+    },
+    orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+    select: selectBatchHousehold
+  });
+
+  if (emailMatch) {
+    return emailMatch;
+  }
+
+  const phone = cleanPhoneNumber(input.phone ?? input["Phone(Membership holder phone)"]);
+
+  if (!phone) {
+    return null;
+  }
+
+  return prisma.person.findFirst({
+    where: {
+      clubId,
+      phone
+    },
+    orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+    select: selectBatchHousehold
+  });
+};
+
 const getFamilyMemberNames = (person: FoundPerson): string[] =>
   person.membership.persons
     .filter((familyMember) => familyMember.id !== person.id)
@@ -330,6 +434,123 @@ const handleSignOut = async (person: FoundPerson): Promise<{ valid: true; messag
     valid: true,
     message: `Goodbye ${person.firstName}!`
   };
+};
+
+const handleBatchCheckIn = async (
+  clubId: string,
+  input: CheckInWebhookPayload,
+  namedMembers: string[],
+  res: Parameters<RequestHandler>[1]
+): Promise<void> => {
+  const household = await findHouseholdForBatch(clubId, input);
+
+  if (!household) {
+    res.status(404).json({ valid: false, message: "Member not found. Please see staff." });
+    return;
+  }
+
+  const membership = household.membership;
+  const matched: BatchPerson[] = [];
+  const unmatched: string[] = [];
+
+  for (const memberName of namedMembers) {
+    const householdPerson = membership.persons.find((person) => normalizeName(fullName(person)) === normalizeName(memberName));
+
+    if (householdPerson) {
+      matched.push(householdPerson);
+    } else {
+      unmatched.push(memberName);
+    }
+  }
+
+  if (unmatched.length > 0) {
+    res.status(422).json({
+      valid: false,
+      code: "BATCH_NAME_UNMATCHED",
+      message: `We couldn't find: ${unmatched.join(", ")}. Please see staff.`
+    });
+    return;
+  }
+
+  if (membership.status !== "ACTIVE") {
+    res.status(422).json({
+      valid: false,
+      code: "MEMBERSHIP_NOT_ACTIVE",
+      message: "Membership is not active. Please see staff."
+    });
+    return;
+  }
+
+  const alreadyCheckedIn = matched.find((person) => person.checkinEvents.length > 0);
+
+  if (alreadyCheckedIn) {
+    res.status(409).json({
+      valid: false,
+      code: "ALREADY_CHECKED_IN",
+      message: `${fullName(alreadyCheckedIn)} is already checked in. Please see staff.`
+    });
+    return;
+  }
+
+  const currentActive = membership.persons.filter((person) => person.checkinEvents.length > 0).length;
+
+  if (currentActive + matched.length > membership.maxMembers) {
+    res.status(403).json({
+      valid: false,
+      code: "MEMBERSHIP_AT_CAPACITY",
+      message: "This would exceed your membership capacity. Please see staff."
+    });
+    return;
+  }
+
+  const numGuests = parseBatchGuestCount(input);
+  const guestPassesRemaining = membership.guestPassesTotal - membership.guestPassesUsed;
+
+  if (numGuests > guestPassesRemaining) {
+    res.status(403).json({
+      valid: false,
+      code: "INSUFFICIENT_GUEST_PASSES",
+      message: "Not enough guest passes. Please see staff or buy more."
+    });
+    return;
+  }
+
+  await prisma.$transaction(async (transaction) => {
+    for (const [index, person] of matched.entries()) {
+      await transaction.checkinEvent.create({
+        data: {
+          clubId,
+          personId: person.id,
+          membershipId: membership.id,
+          eventType: "check_in",
+          isActive: true,
+          checkedInAt: new Date(),
+          numGuests: index === 0 ? numGuests : 0,
+          source: "qr_form_batch"
+        }
+      });
+    }
+
+    if (numGuests > 0) {
+      await transaction.membership.update({
+        where: { id: membership.id },
+        data: {
+          guestPassesUsed: {
+            increment: numGuests
+          }
+        }
+      });
+    }
+  });
+
+  res.status(200).json({
+    valid: true,
+    message: `Welcome ${matched[0]?.firstName ?? "Member"}!`,
+    checkedIn: matched.map((person) => fullName(person)),
+    numGuests,
+    guestPassesRemaining: membership.guestPassesTotal - (membership.guestPassesUsed + numGuests),
+    currentlyCheckedIn: currentActive + matched.length
+  });
 };
 
 export const checkInHandler: RequestHandler = async (req, res, next) => {
@@ -367,6 +588,22 @@ export const checkInHandler: RequestHandler = async (req, res, next) => {
 
     if (action !== "Sign-In" && action !== "Sign-Out") {
       res.status(400).json({ valid: false, message: "Invalid check-in option" });
+      return;
+    }
+
+    const namedMembers = collectNamedMembers(input);
+    const isBatchPayload = namedMembers.length > 0;
+
+    if (isBatchPayload) {
+      if (action === "Sign-Out") {
+        res.status(400).json({
+          valid: false,
+          message: "Batch sign-out belongs on the sign-out form. Please see staff."
+        });
+        return;
+      }
+
+      await handleBatchCheckIn(club.id, input, namedMembers, res);
       return;
     }
 
