@@ -6,7 +6,7 @@ import { logger } from "../lib/logger";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../middleware/errorHandler";
 
-const FAMILY_MEMBER_ORDINALS = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"] as const;
+const FAMILY_MEMBER_ORDINALS = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th"] as const;
 
 const signupSchema = z
   .object({

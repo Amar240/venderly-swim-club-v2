@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { AlertTriangle, CalendarDays, CreditCard, Loader2, MapPin, Phone, Ticket, type LucideIcon } from "lucide-react";
+import { CalendarDays, CreditCard, Loader2, MapPin, Phone, Ticket, X, type LucideIcon } from "lucide-react";
 import { motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -19,6 +19,15 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "./ui/sheet";
 import { Skeleton } from "./ui/skeleton";
 
+const NO_ALLERGY_PATTERNS = /^(no|none|n\/?a|nothing|nope|no allergies|n|\/|-)$/i;
+
+const hasReportedAllergy = (text: string | null | undefined): boolean => {
+  if (!text) return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  return !NO_ALLERGY_PATTERNS.test(trimmed);
+};
+
 export const MemberDetailSheet = ({
   personId,
   open,
@@ -35,6 +44,14 @@ export const MemberDetailSheet = ({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-hidden bg-brand-surface p-0 sm:max-w-2xl">
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={() => onOpenChange(false)}
+          className="absolute right-4 top-4 z-50 flex h-11 w-11 items-center justify-center rounded-full border border-brand-border bg-white text-brand-navy shadow-sm transition-colors hover:bg-brand-background focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+        >
+          <X className="h-5 w-5" />
+        </button>
         <ScrollArea className="h-full">
           <motion.div
             initial={reduced ? false : "hidden"}
@@ -86,7 +103,7 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
   }, [clickedPersonId, reduced]);
 
   const address = formatAddress(member.membership);
-  const allergyRows = member.family.filter((person) => person.allergies.trim().length > 0);
+  const allergyRows = member.family.filter((person) => hasReportedAllergy(person.allergies));
   const guestPassesRemaining = Math.max(0, member.membership.guestPassesTotal - member.membership.guestPassesUsed);
   const canDecrementGuests = guestCount > 0;
   const canIncrementGuests = guestCount < guestPassesRemaining;
@@ -274,13 +291,15 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
         <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Details</h3>
         <div className="space-y-3 rounded-xl border border-brand-border p-4">
           {allergyRows.map((person) => (
-            <DetailRow
+            <div
               key={person.personId}
-              icon={AlertTriangle}
-              label={`Allergies: ${person.name}`}
-              value={person.allergies}
-              danger
-            />
+              className="rounded-lg border border-brand-border bg-white px-4 py-3"
+            >
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Allergies / Notes: {person.firstName} {person.lastName}
+              </div>
+              <div className="mt-1 text-sm text-brand-navy">{person.allergies}</div>
+            </div>
           ))}
           <DetailRow
             icon={Phone}

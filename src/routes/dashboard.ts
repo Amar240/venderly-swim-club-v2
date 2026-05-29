@@ -5,7 +5,8 @@ import {
   getRecentCheckinEvents,
   manualCheckin,
   manualSignout,
-  searchMembers
+  searchMembers,
+  updateClubCapacity
 } from "../handlers/dashboard";
 import { jwtAuth } from "../middleware/jwtAuth";
 
@@ -19,3 +20,4 @@ dashboardRouter.get("/recent", getRecentCheckinEvents);
 dashboardRouter.get("/search", searchMembers);
 dashboardRouter.post("/signout/manual", manualSignout);
 dashboardRouter.post("/checkin/manual", manualCheckin);
+dashboardRouter.post("/capacity", updateClubCapacity);

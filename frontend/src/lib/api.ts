@@ -238,6 +238,11 @@ export const postManualCheckin = async (personId: string, numGuests = 0): Promis
   return response.data;
 };
 
+export const postUpdateCapacity = async (capacity: number): Promise<{ success: boolean; capacity: number }> => {
+  const response = await api.post<{ success: boolean; capacity: number }>("/dashboard/capacity", { capacity });
+  return response.data;
+};
+
 export const fetchMemberships = async (params: { q?: string; tier?: string }): Promise<MembershipsResponse> => {
   const response = await api.get<MembershipsResponse>("/memberships", { params });
   return response.data;

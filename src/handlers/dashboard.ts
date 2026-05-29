@@ -35,6 +35,10 @@ const manualCheckinSchema = z.object({
   numGuests: z.number().int().min(0).max(10).optional().default(0)
 });
 
+const updateCapacitySchema = z.object({
+  capacity: z.number().int().min(1).max(2000)
+});
+
 const getStaffClubId = (res: StaffResponse): string => res.locals.staff.clubId;
 
 const fullName = (person: { firstName: string; lastName: string }): string =>
@@ -499,6 +503,27 @@ export const manualCheckin: RequestHandler = async (req, res, next) => {
       return;
     }
 
+    next(error);
+  }
+};
+
+export const updateClubCapacity: RequestHandler = async (req, res, next) => {
+  try {
+    const staffResponse = res as StaffResponse;
+    const clubId = staffResponse.locals.staff.clubId;
+    const { capacity } = updateCapacitySchema.parse(req.body);
+
+    const updated = await prisma.club.update({
+      where: { id: clubId },
+      data: { maxCapacity: capacity },
+      select: { id: true, maxCapacity: true }
+    });
+
+    res.json({
+      success: true,
+      capacity: updated.maxCapacity
+    });
+  } catch (error) {
     next(error);
   }
 };
