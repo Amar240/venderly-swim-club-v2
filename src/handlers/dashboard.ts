@@ -221,6 +221,7 @@ export const getRecentCheckinEvents: RequestHandler = async (req, res, next) => 
         numGuests: true,
         person: {
           select: {
+            id: true,
             firstName: true,
             lastName: true,
             membership: {
@@ -234,6 +235,7 @@ export const getRecentCheckinEvents: RequestHandler = async (req, res, next) => 
     const events = checkins
       .map((event) => ({
         eventId: event.id,
+        personId: event.person.id,
         eventType: event.signedOutAt ? "sign_out" : event.eventType,
         personName: fullName(event.person),
         membershipTier: event.person.membership.tier,

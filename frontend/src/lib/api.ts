@@ -63,6 +63,7 @@ export interface ActiveCheckinsResponse {
 
 export interface RecentActivityEvent {
   eventId: string;
+  personId: string;
   eventType: "check_in" | "sign_out" | string;
   personName: string;
   membershipTier: string;

@@ -44,6 +44,10 @@ export const Dashboard = () => {
   const searchMatches = debouncedSearch.trim().length >= 2 ? searchQuery.data?.matches ?? [] : [];
   const panelClass = cn("transition-opacity", connection.isOffline && "opacity-70");
 
+  const openMember = (personId: string): void => {
+    setSelectedPersonId(personId);
+  };
+
   const signOut = (personId: string, name: string): void => {
     if (!window.confirm(`Sign out ${name}? They might still be at the pool.`)) {
       return;
@@ -136,6 +140,7 @@ export const Dashboard = () => {
                     key={person.checkinEventId}
                     person={person}
                     onSignOut={signOut}
+                    onOpenMember={openMember}
                     isSigningOut={manualSignout.isPending}
                   />
                 ))}
@@ -149,7 +154,7 @@ export const Dashboard = () => {
             {recentQuery.isLoading ? (
               <SkeletonList />
             ) : recent?.events.length ? (
-              recent.events.map((event) => <ActivityFeedItem key={event.eventId} event={event} />)
+              recent.events.map((event) => <ActivityFeedItem key={event.eventId} event={event} onOpenMember={openMember} />)
             ) : (
               <EmptyState>No activity yet today</EmptyState>
             )}
