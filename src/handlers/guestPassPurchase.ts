@@ -6,19 +6,7 @@ import { logger } from "../lib/logger";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../middleware/errorHandler";
 
-const quantitySchema = z.union([z.number(), z.string()]).transform((value, context) => {
-  const parsed = typeof value === "number" ? value : Number.parseInt(value, 10);
-
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "quantity invalid"
-    });
-    return z.NEVER;
-  }
-
-  return Math.min(parsed, 50);
-});
+const PACK_PRICE_DOLLARS = 50;
 
 const guestPassPurchaseSchema = z
   .object({
@@ -28,9 +16,19 @@ const guestPassPurchaseSchema = z
       })
       .passthrough(),
     contact_id: z.string().min(1),
-    order_id: z.string().min(1),
-    quantity: quantitySchema,
-    amount: z.union([z.number(), z.string()]).optional()
+    order_id: z.string().optional(),
+    quantity: z.union([z.number(), z.string()]).optional(),
+    amount: z
+      .union([z.number(), z.string(), z.null()])
+      .optional()
+      .transform((value) => {
+        if (value === undefined || value === "" || value === null) {
+          return undefined;
+        }
+
+        const parsed = typeof value === "number" ? value : Number.parseFloat(String(value));
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+      })
   })
   .passthrough();
 
@@ -71,7 +69,33 @@ export const guestPassPurchaseHandler: RequestHandler = async (req, res, next) =
       throw new HttpError(422, "MEMBERSHIP_NOT_FOUND", "No membership matches that contact");
     }
 
-    const passesToAdd = input.quantity * PASSES_PER_PACK;
+    const amount = input.amount;
+    const amountInDollars =
+      amount !== undefined && amount < 1000 ? amount : amount !== undefined ? amount / 100 : undefined;
+    const explicit =
+      typeof input.quantity === "number"
+        ? input.quantity
+        : typeof input.quantity === "string" && input.quantity.trim() !== ""
+          ? Number.parseInt(input.quantity, 10)
+          : undefined;
+    const derived = amountInDollars !== undefined ? Math.round(amountInDollars / PACK_PRICE_DOLLARS) : undefined;
+    const quantity = (explicit && explicit > 0 ? explicit : derived) ?? 0;
+
+    if (quantity < 1) {
+      throw new HttpError(
+        422,
+        "QUANTITY_REQUIRED",
+        "Could not determine pack quantity from order_id, quantity, or amount. Please see staff."
+      );
+    }
+
+    const cappedQuantity = Math.min(quantity, 50);
+    const trimmedOrder = input.order_id?.trim();
+    const orderId =
+      trimmedOrder && trimmedOrder.length > 0
+        ? trimmedOrder
+        : `fallback-${input.contact_id}-${amount ?? "noamt"}-${cappedQuantity}`;
+    const passesToAdd = cappedQuantity * PASSES_PER_PACK;
 
     try {
       const result = await prisma.$transaction(async (transaction) => {
@@ -79,8 +103,8 @@ export const guestPassPurchaseHandler: RequestHandler = async (req, res, next) =
           data: {
             clubId: club.id,
             membershipId: membership.id,
-            code: input.order_id,
-            quantityPurchased: input.quantity,
+            code: orderId,
+            quantityPurchased: cappedQuantity,
             quantityUsed: 0
           },
           select: { id: true }
@@ -111,7 +135,7 @@ export const guestPassPurchaseHandler: RequestHandler = async (req, res, next) =
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        logger.info("Duplicate guest-pass webhook ignored", { orderId: input.order_id });
+        logger.info("Duplicate guest-pass webhook ignored", { orderId });
         res.status(200).json({
           success: true,
           message: "Order already processed",
