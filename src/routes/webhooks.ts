@@ -15,19 +15,6 @@ const ghlWebhookSchema = z.object({
 
 export const webhooksRouter = Router();
 
-// TEMPORARY - remove before production
-webhooksRouter.post("/debug", (req, res) => {
-  console.log(JSON.stringify(req.body, null, 2));
-  console.log(req.headers);
-
-  res.status(200).json({
-    received: true,
-    timestamp: new Date().toISOString(),
-    body_keys: Object.keys(req.body),
-    body: req.body
-  });
-});
-
 webhooksRouter.post("/ghl/signup", signupHandler);
 webhooksRouter.post("/ghl/checkin", checkInHandler);
 webhooksRouter.post("/ghl/signout", signOutHandler);
