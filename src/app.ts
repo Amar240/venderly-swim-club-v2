@@ -7,6 +7,8 @@ import { routes } from "./routes";
 
 export const createApp = (): express.Express => {
   const app = express();
+  app.set("trust proxy", 1);
+
   const corsOrigin = process.env.CORS_ORIGIN ?? "*";
   const frontendDistPath = path.join(__dirname, "../frontend/dist");
   const frontendIndexPath = path.join(frontendDistPath, "index.html");
