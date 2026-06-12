@@ -7,6 +7,9 @@ import { TopBar } from "./components/TopBar";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { UiPrefsProvider } from "./hooks/useUiPrefs";
 import { queryClient } from "./lib/queryClient";
+import { AdminActivity } from "./pages/AdminActivity";
+import { AdminStaff } from "./pages/AdminStaff";
+import { AdminWebhooks } from "./pages/AdminWebhooks";
 import { Dashboard } from "./pages/Dashboard";
 import { Login } from "./pages/Login";
 import { Members } from "./pages/Members";
@@ -57,6 +60,31 @@ function App() {
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/members" element={<Members />} />
                   <Route path="/members/:id" element={<Members />} />
+                  <Route path="/admin" element={<Navigate to="/admin/staff" replace />} />
+                  <Route
+                    path="/admin/staff"
+                    element={
+                      <ProtectedRoute adminOnly>
+                        <AdminStaff />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/admin/activity"
+                    element={
+                      <ProtectedRoute adminOnly>
+                        <AdminActivity />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/admin/webhooks"
+                    element={
+                      <ProtectedRoute adminOnly>
+                        <AdminWebhooks />
+                      </ProtectedRoute>
+                    }
+                  />
                 </Route>
                 <Route
                   path="/reports"

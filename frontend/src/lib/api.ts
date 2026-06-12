@@ -225,11 +225,44 @@ export interface ManualCheckinResponse {
   guestPassesRemaining: number;
 }
 
+export interface StaffMember {
+  id: string;
+  name: string;
+  email: string;
+  role: "ADMIN" | "STAFF";
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface ActivityEvent {
+  eventId: string;
+  timestamp: string;
+  actionType: "manual_checkin" | "manual_signout";
+  staffId: string;
+  staffName: string;
+  memberName: string;
+}
+
+export type WebhookEventStatus = "RECEIVED" | "PROCESSED" | "FAILED";
+export type WebhookEndpoint = "signup" | "checkin" | "signout" | "guestpass";
+
+export interface WebhookEventListItem {
+  id: string;
+  endpoint: WebhookEndpoint;
+  status: WebhookEventStatus;
+  errorMessage: string | null;
+  replayOfId: string | null;
+  receivedAt: string;
+  processedAt: string | null;
+  payloadPreview: string;
+}
+
+export interface WebhookEventDetail extends WebhookEventListItem {
+  rawPayload: unknown;
+}
+
 export const postLogin = async (pin: string): Promise<LoginResponse> => {
-  const response = await api.post<LoginResponse>("/auth/login", {
-    email: "staff@wedgewood.com",
-    pin
-  });
+  const response = await api.post<LoginResponse>("/auth/login", { pin });
   return response.data;
 };
 
@@ -240,6 +273,95 @@ export const postManualCheckin = async (personId: string, numGuests = 0): Promis
 
 export const postUpdateCapacity = async (capacity: number): Promise<{ success: boolean; capacity: number }> => {
   const response = await api.post<{ success: boolean; capacity: number }>("/dashboard/capacity", { capacity });
+  return response.data;
+};
+
+export const fetchStaff = async (): Promise<{ staff: StaffMember[] }> => {
+  const response = await api.get<{ staff: StaffMember[] }>("/admin/staff");
+  return response.data;
+};
+
+export const createStaff = async (data: {
+  name: string;
+  email: string;
+  pin: string;
+  role: "ADMIN" | "STAFF";
+}): Promise<{ staff: StaffMember }> => {
+  const response = await api.post<{ staff: StaffMember }>("/admin/staff", data);
+  return response.data;
+};
+
+export const updateStaff = async (
+  id: string,
+  data: Partial<{ name: string; pin: string; role: "ADMIN" | "STAFF" }>
+): Promise<{ staff: StaffMember }> => {
+  const response = await api.patch<{ staff: StaffMember }>(`/admin/staff/${id}`, data);
+  return response.data;
+};
+
+export const deactivateStaff = async (id: string): Promise<void> => {
+  await api.delete(`/admin/staff/${id}`);
+};
+
+export const fetchActivity = async (params: {
+  staffId?: string;
+  date?: string;
+  limit?: number;
+}): Promise<{ events: ActivityEvent[] }> => {
+  const response = await api.get<{ events: ActivityEvent[] }>("/admin/activity", { params });
+  return response.data;
+};
+
+export const fetchWebhookEvents = async (params: {
+  status?: WebhookEventStatus;
+  endpoint?: WebhookEndpoint;
+  limit?: number;
+}): Promise<{ events: WebhookEventListItem[] }> => {
+  const response = await api.get<{ events: WebhookEventListItem[] }>("/admin/webhooks", { params });
+  return response.data;
+};
+
+export const fetchWebhookEvent = async (id: string): Promise<{ event: WebhookEventDetail }> => {
+  const response = await api.get<{ event: WebhookEventDetail }>(`/admin/webhooks/${id}`);
+  return response.data;
+};
+
+export const replayWebhookEvent = async (
+  id: string
+): Promise<{ replayedEventId: string; status: WebhookEventStatus; statusCode: number }> => {
+  const response = await api.post<{ replayedEventId: string; status: WebhookEventStatus; statusCode: number }>(
+    `/admin/webhooks/${id}/replay`
+  );
+  return response.data;
+};
+
+export const patchPerson = async (
+  personId: string,
+  body: Record<string, unknown>
+): Promise<{ person: Record<string, unknown> }> => {
+  const response = await api.patch<{ person: Record<string, unknown> }>(`/members/persons/${personId}`, body);
+  return response.data;
+};
+
+export const patchAddress = async (
+  membershipId: string,
+  body: Record<string, unknown>
+): Promise<{ membership: Record<string, unknown> }> => {
+  const response = await api.patch<{ membership: Record<string, unknown> }>(
+    `/members/memberships/${membershipId}/address`,
+    body
+  );
+  return response.data;
+};
+
+export const patchEmergency = async (
+  membershipId: string,
+  body: Record<string, unknown>
+): Promise<{ membershipId: string; updatedCount: number }> => {
+  const response = await api.patch<{ membershipId: string; updatedCount: number }>(
+    `/members/memberships/${membershipId}/emergency`,
+    body
+  );
   return response.data;
 };
 

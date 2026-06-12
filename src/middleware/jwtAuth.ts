@@ -34,8 +34,15 @@ export const jwtAuth: RequestHandler = (req, res, next) => {
   }
 
   const token = authorization.slice("Bearer ".length);
-  const decoded = jwt.verify(token, jwtSecret);
-  const payload = jwtPayloadSchema.parse(decoded) satisfies JwtPayload;
+  let payload: JwtPayload;
+
+  try {
+    const decoded = jwt.verify(token, jwtSecret);
+    payload = jwtPayloadSchema.parse(decoded) satisfies JwtPayload;
+  } catch {
+    next(new HttpError(401, "INVALID_AUTH_TOKEN", "Invalid bearer token"));
+    return;
+  }
 
   staffResponse.locals.staff = {
     id: payload.sub,

@@ -219,7 +219,11 @@ export const signOutHandler: RequestHandler = async (req, res, next) => {
       const household = await findHouseholdByEmailOrPhone(club.id, input);
 
       if (!household) {
-        res.status(404).json({ valid: false, message: "Member not found. Please see staff." });
+        res.status(200).json({
+          valid: false,
+          code: "NOT_FOUND",
+          message: "Member not found. Please see staff."
+        });
         return;
       }
 
@@ -277,7 +281,11 @@ export const signOutHandler: RequestHandler = async (req, res, next) => {
     const person = await findPersonByEmail(club.id, input);
 
     if (!person) {
-      res.status(404).json({ valid: false, message: "Member not found. Please see staff." });
+      res.status(200).json({
+        valid: false,
+        code: "NOT_FOUND",
+        message: "Member not found. Please see staff."
+      });
       return;
     }
 
@@ -291,7 +299,11 @@ export const signOutHandler: RequestHandler = async (req, res, next) => {
     });
 
     if (!activeCheckin) {
-      res.status(404).json({ valid: false, message: "Not currently checked in" });
+      res.status(200).json({
+        valid: false,
+        code: "NOT_FOUND",
+        message: "Not currently checked in"
+      });
       return;
     }
 

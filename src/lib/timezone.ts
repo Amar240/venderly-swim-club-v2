@@ -50,3 +50,18 @@ export const getNewYorkTodayBounds = (): { start: Date; end: Date } => {
     end: localDateTimeToUtc(nowParts.year, nowParts.month, nowParts.day + 1, NEW_YORK_TIME_ZONE)
   };
 };
+
+export const getDayBounds = (
+  date: string,
+  timeZone = NEW_YORK_TIME_ZONE
+): { start: Date; end: Date } => {
+  const [yearRaw, monthRaw, dayRaw] = date.split("-");
+  const year = Number.parseInt(yearRaw ?? "", 10);
+  const month = Number.parseInt(monthRaw ?? "", 10);
+  const day = Number.parseInt(dayRaw ?? "", 10);
+
+  return {
+    start: localDateTimeToUtc(year, month, day, timeZone),
+    end: localDateTimeToUtc(year, month, day + 1, timeZone)
+  };
+};

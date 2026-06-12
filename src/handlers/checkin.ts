@@ -98,12 +98,12 @@ const cleanPhoneNumber = (phone: string | undefined): string | undefined => {
   return normalized.length > 0 ? normalized : undefined;
 };
 
-const normalizeName = (name: string): string => name.trim().replace(/\s+/g, " ").toLowerCase();
+export const normalizeName = (name: string): string => name.trim().replace(/\s+/g, " ").toLowerCase();
 
-const fullName = (person: { firstName: string; lastName: string }): string =>
+export const fullName = (person: { firstName: string; lastName: string }): string =>
   `${person.firstName} ${person.lastName}`.trim();
 
-const parseGuestCount = (rawGuests: string | undefined): number => {
+export const parseGuestCount = (rawGuests: string | undefined): number => {
   if (!rawGuests) {
     return 0;
   }
@@ -472,7 +472,7 @@ const handleBatchCheckIn = async (
   }
 
   if (unmatched.length > 0) {
-    res.status(422).json({
+    res.status(200).json({
       valid: false,
       code: "BATCH_NAME_UNMATCHED",
       message: `We couldn't find: ${unmatched.join(", ")}. Please see staff.`
@@ -481,7 +481,7 @@ const handleBatchCheckIn = async (
   }
 
   if (membership.status !== "ACTIVE") {
-    res.status(422).json({
+    res.status(200).json({
       valid: false,
       code: "MEMBERSHIP_NOT_ACTIVE",
       message: "Membership is not active. Please see staff."
@@ -492,7 +492,7 @@ const handleBatchCheckIn = async (
   const alreadyCheckedIn = matched.find((person) => person.checkinEvents.length > 0);
 
   if (alreadyCheckedIn) {
-    res.status(409).json({
+    res.status(200).json({
       valid: false,
       code: "ALREADY_CHECKED_IN",
       message: `${fullName(alreadyCheckedIn)} is already checked in. Please see staff.`
@@ -503,7 +503,7 @@ const handleBatchCheckIn = async (
   const currentActive = membership.persons.filter((person) => person.checkinEvents.length > 0).length;
 
   if (currentActive + matched.length > membership.maxMembers) {
-    res.status(403).json({
+    res.status(200).json({
       valid: false,
       code: "MEMBERSHIP_AT_CAPACITY",
       message: "This would exceed your membership capacity. Please see staff."
@@ -515,7 +515,7 @@ const handleBatchCheckIn = async (
   const guestPassesRemaining = membership.guestPassesTotal - membership.guestPassesUsed;
 
   if (numGuests > guestPassesRemaining) {
-    res.status(403).json({
+    res.status(200).json({
       valid: false,
       code: "INSUFFICIENT_GUEST_PASSES",
       message: "Not enough guest passes. Please see staff or buy more."
@@ -642,7 +642,11 @@ export const checkInHandler: RequestHandler = async (req, res, next) => {
     });
 
     if (activeMembershipCheckins >= person.membership.maxMembers) {
-      res.status(403).json({ valid: false, message: "Membership is at capacity" });
+      res.status(200).json({
+        valid: false,
+        code: "MEMBERSHIP_AT_CAPACITY",
+        message: "Membership is at capacity"
+      });
       return;
     }
 
@@ -655,7 +659,11 @@ export const checkInHandler: RequestHandler = async (req, res, next) => {
     });
 
     if (existingCheckin) {
-      res.status(409).json({ valid: false, message: "Already checked in" });
+      res.status(200).json({
+        valid: false,
+        code: "ALREADY_CHECKED_IN",
+        message: "Already checked in"
+      });
       return;
     }
 
@@ -685,7 +693,11 @@ export const checkInHandler: RequestHandler = async (req, res, next) => {
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      res.status(409).json({ valid: false, message: "Already checked in" });
+      res.status(200).json({
+        valid: false,
+        code: "ALREADY_CHECKED_IN",
+        message: "Already checked in"
+      });
       return;
     }
 

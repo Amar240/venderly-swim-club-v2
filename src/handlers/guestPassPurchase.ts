@@ -79,7 +79,12 @@ export const guestPassPurchaseHandler: RequestHandler = async (req, res, next) =
     });
 
     if (!membership) {
-      throw new HttpError(422, "MEMBERSHIP_NOT_FOUND", "No membership matches that contact");
+      res.status(200).json({
+        valid: false,
+        code: "MEMBERSHIP_NOT_FOUND",
+        message: "No membership matches that contact"
+      });
+      return;
     }
 
     const rawAmount = input.payment?.total_amount ?? input.amount;
@@ -107,11 +112,12 @@ export const guestPassPurchaseHandler: RequestHandler = async (req, res, next) =
     const quantity = (explicit && explicit > 0 ? explicit : derived) ?? 0;
 
     if (quantity < 1) {
-      throw new HttpError(
-        422,
-        "QUANTITY_REQUIRED",
-        "Could not determine pack quantity from order_id, quantity, or amount. Please see staff."
-      );
+      res.status(200).json({
+        valid: false,
+        code: "QUANTITY_REQUIRED",
+        message: "Could not determine pack quantity from order_id, quantity, or amount. Please see staff."
+      });
+      return;
     }
 
     const cappedQuantity = Math.min(quantity, 50);

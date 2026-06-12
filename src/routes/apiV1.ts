@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma";
 import { getNewYorkTodayBounds } from "../lib/timezone";
 import { HttpError } from "../middleware/errorHandler";
 import { jwtAuth, type StaffResponse } from "../middleware/jwtAuth";
+import { updateMembershipAddress, updateMembershipEmergency, updatePerson } from "../handlers/memberEdit";
 import { adminRouter } from "./admin";
 import { authRouter } from "./auth";
 import { dashboardRouter } from "./dashboard";
@@ -239,6 +240,10 @@ membersRouter.get("/", async (req, res, next) => {
     next(error);
   }
 });
+
+membersRouter.patch("/persons/:id", updatePerson);
+membersRouter.patch("/memberships/:id/address", updateMembershipAddress);
+membersRouter.patch("/memberships/:id/emergency", updateMembershipEmergency);
 
 membersRouter.get("/:id", async (req, res, next) => {
   try {

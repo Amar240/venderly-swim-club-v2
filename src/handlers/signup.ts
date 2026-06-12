@@ -71,7 +71,7 @@ type MembershipTier = {
   maxMembers: number;
 };
 
-const cleanPhoneNumber = (phone: string | undefined): string | undefined => {
+export const cleanPhoneNumber = (phone: string | undefined): string | undefined => {
   if (!phone) {
     return undefined;
   }
@@ -81,7 +81,7 @@ const cleanPhoneNumber = (phone: string | undefined): string | undefined => {
   return normalized.length > 0 ? normalized : undefined;
 };
 
-const parseAge = (age: unknown): number | undefined => {
+export const parseAge = (age: unknown): number | undefined => {
   if (typeof age === "number" && Number.isInteger(age)) {
     return age;
   }
@@ -94,7 +94,7 @@ const parseAge = (age: unknown): number | undefined => {
   return Number.isNaN(parsed) ? undefined : parsed;
 };
 
-const splitFullName = (fullName: string): { firstName: string; lastName: string } => {
+export const splitFullName = (fullName: string): { firstName: string; lastName: string } => {
   const parts = fullName.trim().split(/\s+/).filter(Boolean);
   const [firstName = "", ...lastNameParts] = parts;
 
@@ -104,10 +104,11 @@ const splitFullName = (fullName: string): { firstName: string; lastName: string 
   };
 };
 
-const normalizeName = (fullName: string): string =>
+export const normalizeName = (fullName: string): string =>
   fullName
     .trim()
-    .replace(/[.,;:\-]/g, "")
+    .replace(/-/g, " ")
+    .replace(/[.,;:]/g, "")
     .replace(/\s+/g, " ")
     .toLowerCase();
 
@@ -116,7 +117,7 @@ const getStringField = (payload: SignupPayload, fieldName: string): string | und
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 };
 
-const parseMembershipTier = (memberCount: string | undefined): MembershipTier => {
+export const parseMembershipTier = (memberCount: string | undefined): MembershipTier => {
   switch (memberCount?.trim()) {
     case "1":
       return { tier: "Student/Adult", maxMembers: 1 };

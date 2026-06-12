@@ -25,6 +25,12 @@ enum PersonStatus {
   SUSPENDED
 }
 
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+}
+
 model Club {
   id                 String              @id @default(uuid())
   name               String
@@ -188,4 +194,20 @@ model GuestPassPurchase {
   @@index([clubId, membershipId])
   @@index([clubId, personId])
   @@map("guest_pass_purchases")
+}
+
+model WebhookEvent {
+  id           String             @id @default(uuid())
+  clubId       String?            @map("club_id")
+  endpoint     String
+  rawPayload   Json               @map("raw_payload")
+  status       WebhookEventStatus @default(RECEIVED)
+  errorMessage String?            @map("error_message")
+  replayOfId   String?            @map("replay_of_id")
+  receivedAt   DateTime           @default(now()) @map("received_at")
+  processedAt  DateTime?          @map("processed_at")
+
+  @@index([status, receivedAt])
+  @@index([endpoint, receivedAt])
+  @@map("webhook_events")
 }

@@ -70,7 +70,10 @@ export const getDashboardSummary: RequestHandler = async (_req, res, next) => {
       prisma.checkinEvent.aggregate({
         where: {
           clubId,
-          isActive: true
+          isActive: true,
+          checkedInAt: {
+            gte: todayBounds.start
+          }
         },
         _count: { _all: true },
         _sum: { numGuests: true }
@@ -130,10 +133,14 @@ export const getActiveCheckins: RequestHandler = async (_req, res, next) => {
   try {
     const staffResponse = res as StaffResponse;
     const clubId = getStaffClubId(staffResponse);
+    const todayBounds = getNewYorkTodayBounds();
     const checkins = await prisma.checkinEvent.findMany({
       where: {
         clubId,
-        isActive: true
+        isActive: true,
+        checkedInAt: {
+          gte: todayBounds.start
+        }
       },
       orderBy: { checkedInAt: "asc" },
       select: {
@@ -288,6 +295,7 @@ export const manualSignout: RequestHandler = async (req, res, next) => {
   try {
     const staffResponse = res as StaffResponse;
     const clubId = getStaffClubId(staffResponse);
+    const staffId = staffResponse.locals.staff.id;
     const { personId, membershipId, scope } = manualSignoutSchema.parse(req.body);
 
     if (scope === "membership") {
@@ -333,7 +341,8 @@ export const manualSignout: RequestHandler = async (req, res, next) => {
           },
           data: {
             isActive: false,
-            signedOutAt: new Date()
+            signedOutAt: new Date(),
+            staffId
           }
         });
       });
@@ -379,7 +388,8 @@ export const manualSignout: RequestHandler = async (req, res, next) => {
         where: { id: activeCheckin.id },
         data: {
           isActive: false,
-          signedOutAt: new Date()
+          signedOutAt: new Date(),
+          staffId
         }
       });
     });

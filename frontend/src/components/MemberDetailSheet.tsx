@@ -1,11 +1,12 @@
 import { format } from "date-fns";
-import { CalendarDays, CreditCard, Loader2, MapPin, Phone, Ticket, X, type LucideIcon } from "lucide-react";
+import { CalendarDays, CreditCard, Loader2, MapPin, Pencil, Phone, Ticket, X, type LucideIcon } from "lucide-react";
 import { motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useManualSignout } from "../hooks/useDashboard";
 import { useManualCheckin } from "../hooks/useManualCheckin";
+import { useUpdateAddress, useUpdateEmergency, useUpdatePerson } from "../hooks/useMemberEdit";
 import { useMemberDetail } from "../hooks/useMembers";
 import { useMotion } from "../hooks/useMotion";
 import type { MemberDetail, MemberDetailFamilyMember, MemberDetailResponse } from "../lib/api";
@@ -15,11 +16,43 @@ import { GuestPassBar } from "./GuestPassBar";
 import { StatusDot } from "./StatusDot";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import { ScrollArea } from "./ui/scroll-area";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "./ui/sheet";
 import { Skeleton } from "./ui/skeleton";
 
 const NO_ALLERGY_PATTERNS = /^(no|none|n\/?a|nothing|nope|no allergies|n|\/|-)$/i;
+
+type EditingSection =
+  | { type: "person"; personId: string }
+  | { type: "address" }
+  | { type: "emergency" }
+  | null;
+
+type PersonFormValues = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  age: string;
+  relationship: string;
+  allergies: string;
+};
+
+type AddressFormValues = {
+  addressStreet: string;
+  addressCity: string;
+  addressState: string;
+  addressPostalCode: string;
+  addressCountry: string;
+};
+
+type EmergencyFormValues = {
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  emergencyContactEmail: string;
+};
 
 const hasReportedAllergy = (text: string | null | undefined): boolean => {
   if (!text) return false;
@@ -114,16 +147,21 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
   const [localStatus, setLocalStatus] = useState<Record<string, boolean>>({});
   const [guestCount, setGuestCount] = useState(0);
   const [localActiveGuests, setLocalActiveGuests] = useState<Record<string, number>>({});
+  const [editing, setEditing] = useState<EditingSection>(null);
   const clickedRowRef = useRef<HTMLDivElement | null>(null);
   const { reduced } = useMotion();
   const manualCheckin = useManualCheckin();
   const manualSignout = useManualSignout();
+  const personMutation = useUpdatePerson(clickedPersonId, editing?.type === "person" ? editing.personId : "");
+  const addressMutation = useUpdateAddress(member.membership.membershipId, clickedPersonId);
+  const emergencyMutation = useUpdateEmergency(member.membership.membershipId, clickedPersonId);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     setLocalStatus({});
     setGuestCount(0);
     setLocalActiveGuests({});
+    setEditing(null);
   }, [member.membership.membershipId]);
 
   useEffect(() => {
@@ -274,6 +312,26 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
           {family.map((person) => {
             const isClicked = person.personId === clickedPersonId;
             const isBusy = manualCheckin.isPending || manualSignout.isPending;
+            const isEditingPerson = editing?.type === "person" && editing.personId === person.personId;
+
+            if (isEditingPerson) {
+              return (
+                <PersonEditForm
+                  key={person.personId}
+                  person={person}
+                  pending={personMutation.isPending}
+                  onCancel={() => setEditing(null)}
+                  onSave={(body) => {
+                    if (Object.keys(body).length === 0) {
+                      setEditing(null);
+                      return;
+                    }
+
+                    personMutation.mutate(body, { onSuccess: () => setEditing(null) });
+                  }}
+                />
+              );
+            }
 
             return (
               <div
@@ -294,16 +352,26 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
                     {person.isCurrentlyIn && person.checkedInAt ? `since ${format(new Date(person.checkedInAt), "h:mm a")}` : person.phone || person.email}
                   </p>
                 </div>
-                {person.isCurrentlyIn ? (
-                  <Button type="button" variant="outline" disabled={isBusy} onClick={() => signOut(person)} className="shrink-0">
-                    Sign Out
-                  </Button>
-                ) : (
-                  <Button type="button" disabled={isBusy} onClick={() => checkIn(person)} className="shrink-0 bg-brand-primary hover:bg-brand-primaryHover">
-                    {manualCheckin.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Check In
-                  </Button>
-                )}
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    aria-label={`Edit ${person.name}`}
+                    onClick={() => setEditing({ type: "person", personId: person.personId })}
+                    className="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-brand-background hover:text-brand-navy focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  {person.isCurrentlyIn ? (
+                    <Button type="button" variant="outline" disabled={isBusy} onClick={() => signOut(person)} className="shrink-0">
+                      Sign Out
+                    </Button>
+                  ) : (
+                    <Button type="button" disabled={isBusy} onClick={() => checkIn(person)} className="shrink-0 bg-brand-primary hover:bg-brand-primaryHover">
+                      {manualCheckin.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Check In
+                    </Button>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -320,14 +388,54 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
         <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Details</h3>
         <div className="space-y-3 rounded-xl border border-brand-border p-4">
           {renderAllergyRows(member)}
-          <DetailRow
-            icon={Phone}
-            label="Emergency"
-            value={[accountHolder.emergencyContactName, accountHolder.emergencyContactPhone, accountHolder.emergencyContactEmail]
-              .filter(Boolean)
-              .join(" · ")}
-          />
-          <DetailRow icon={MapPin} label="Address" value={address} />
+          {editing?.type === "emergency" ? (
+            <EmergencyEditForm
+              accountHolder={accountHolder}
+              pending={emergencyMutation.isPending}
+              onCancel={() => setEditing(null)}
+              onSave={(body) => {
+                if (Object.keys(body).length === 0) {
+                  setEditing(null);
+                  return;
+                }
+
+                emergencyMutation.mutate(body, { onSuccess: () => setEditing(null) });
+              }}
+            />
+          ) : (
+            <EditableDetailRow
+              icon={Phone}
+              label="Emergency"
+              value={[accountHolder.emergencyContactName, accountHolder.emergencyContactPhone, accountHolder.emergencyContactEmail]
+                .filter(Boolean)
+                .join(" · ")}
+              emptyValue="No emergency contact on file"
+              onEdit={() => setEditing({ type: "emergency" })}
+            />
+          )}
+          {editing?.type === "address" ? (
+            <AddressEditForm
+              membership={member.membership}
+              pending={addressMutation.isPending}
+              onCancel={() => setEditing(null)}
+              onSave={(body) => {
+                if (Object.keys(body).length === 0) {
+                  setEditing(null);
+                  return;
+                }
+
+                addressMutation.mutate(body, { onSuccess: () => setEditing(null) });
+              }}
+            />
+          ) : (
+            <EditableDetailRow
+              icon={MapPin}
+              label="Address"
+              value={address}
+              emptyValue="No address on file"
+              onEdit={() => setEditing({ type: "address" })}
+            />
+          )}
           <DetailRow
             icon={CalendarDays}
             label="Member since"
@@ -341,6 +449,284 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
     </div>
   );
 };
+
+const PersonEditForm = ({
+  person,
+  pending,
+  onCancel,
+  onSave
+}: {
+  person: MemberDetailFamilyMember;
+  pending: boolean;
+  onCancel: () => void;
+  onSave: (body: Record<string, unknown>) => void;
+}) => {
+  const initial: PersonFormValues = {
+    firstName: person.firstName,
+    lastName: person.lastName,
+    email: person.email,
+    phone: person.phone,
+    age: person.age === null ? "" : String(person.age),
+    relationship: person.relationship,
+    allergies: person.allergies
+  };
+  const [form, setForm] = useState<PersonFormValues>(initial);
+
+  const save = () => {
+    if (!form.firstName.trim()) {
+      toast.error("First name is required");
+      return;
+    }
+
+    if (!form.relationship.trim()) {
+      toast.error("Relationship is required");
+      return;
+    }
+
+    const ageText = form.age.trim();
+    const parsedAge = ageText === "" ? null : Number.parseInt(ageText, 10);
+
+    if (parsedAge !== null && (!Number.isInteger(parsedAge) || parsedAge < 0 || parsedAge > 120)) {
+      toast.error("Enter an age from 0 to 120");
+      return;
+    }
+
+    const next = {
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      email: form.email.trim(),
+      phone: form.phone,
+      age: parsedAge,
+      relationship: form.relationship.trim(),
+      allergies: form.allergies
+    };
+    const previous = {
+      firstName: initial.firstName,
+      lastName: initial.lastName,
+      email: initial.email,
+      phone: initial.phone,
+      age: person.age,
+      relationship: initial.relationship,
+      allergies: initial.allergies
+    };
+
+    onSave(diffValues(previous, next));
+  };
+
+  return (
+    <div className="rounded-xl border border-brand-border bg-brand-background p-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <EditField label="First name">
+          <Input value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} />
+        </EditField>
+        <EditField label="Last name">
+          <Input value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} />
+        </EditField>
+        <EditField label="Email">
+          <Input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+        </EditField>
+        <EditField label="Phone">
+          <Input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
+        </EditField>
+        <EditField label="Age">
+          <Input
+            inputMode="numeric"
+            value={form.age}
+            onChange={(event) => setForm({ ...form, age: event.target.value.replace(/[^\d]/g, "") })}
+          />
+        </EditField>
+        <EditField label="Relationship">
+          <Input value={form.relationship} onChange={(event) => setForm({ ...form, relationship: event.target.value })} />
+        </EditField>
+        <div className="sm:col-span-2">
+          <EditField label="Allergies / notes">
+            <Input value={form.allergies} onChange={(event) => setForm({ ...form, allergies: event.target.value })} />
+          </EditField>
+        </div>
+      </div>
+      <EditActions pending={pending} onCancel={onCancel} onSave={save} />
+    </div>
+  );
+};
+
+const AddressEditForm = ({
+  membership,
+  pending,
+  onCancel,
+  onSave
+}: {
+  membership: MemberDetail["membership"];
+  pending: boolean;
+  onCancel: () => void;
+  onSave: (body: Record<string, unknown>) => void;
+}) => {
+  const initial: AddressFormValues = {
+    addressStreet: membership.addressStreet,
+    addressCity: membership.addressCity,
+    addressState: membership.addressState,
+    addressPostalCode: membership.addressPostalCode,
+    addressCountry: membership.addressCountry
+  };
+  const [form, setForm] = useState<AddressFormValues>(initial);
+
+  const save = () => {
+    const next = {
+      addressStreet: form.addressStreet.trim(),
+      addressCity: form.addressCity.trim(),
+      addressState: form.addressState.trim(),
+      addressPostalCode: form.addressPostalCode.trim(),
+      addressCountry: form.addressCountry.trim()
+    };
+
+    onSave(diffValues(initial, next));
+  };
+
+  return (
+    <div className="rounded-lg bg-brand-background p-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <EditField label="Street">
+            <Input value={form.addressStreet} onChange={(event) => setForm({ ...form, addressStreet: event.target.value })} />
+          </EditField>
+        </div>
+        <EditField label="City">
+          <Input value={form.addressCity} onChange={(event) => setForm({ ...form, addressCity: event.target.value })} />
+        </EditField>
+        <EditField label="State">
+          <Input value={form.addressState} onChange={(event) => setForm({ ...form, addressState: event.target.value })} />
+        </EditField>
+        <EditField label="Postal code">
+          <Input value={form.addressPostalCode} onChange={(event) => setForm({ ...form, addressPostalCode: event.target.value })} />
+        </EditField>
+        <EditField label="Country">
+          <Input value={form.addressCountry} onChange={(event) => setForm({ ...form, addressCountry: event.target.value })} />
+        </EditField>
+      </div>
+      <EditActions pending={pending} onCancel={onCancel} onSave={save} />
+    </div>
+  );
+};
+
+const EmergencyEditForm = ({
+  accountHolder,
+  pending,
+  onCancel,
+  onSave
+}: {
+  accountHolder: Pick<MemberDetail, "emergencyContactName" | "emergencyContactPhone" | "emergencyContactEmail">;
+  pending: boolean;
+  onCancel: () => void;
+  onSave: (body: Record<string, unknown>) => void;
+}) => {
+  const initial: EmergencyFormValues = {
+    emergencyContactName: accountHolder.emergencyContactName,
+    emergencyContactPhone: accountHolder.emergencyContactPhone,
+    emergencyContactEmail: accountHolder.emergencyContactEmail
+  };
+  const [form, setForm] = useState<EmergencyFormValues>(initial);
+
+  const save = () => {
+    const next = {
+      emergencyContactName: form.emergencyContactName.trim(),
+      emergencyContactPhone: form.emergencyContactPhone,
+      emergencyContactEmail: form.emergencyContactEmail.trim()
+    };
+
+    onSave(diffValues(initial, next));
+  };
+
+  return (
+    <div className="rounded-lg bg-brand-background p-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <EditField label="Name">
+          <Input value={form.emergencyContactName} onChange={(event) => setForm({ ...form, emergencyContactName: event.target.value })} />
+        </EditField>
+        <EditField label="Phone">
+          <Input value={form.emergencyContactPhone} onChange={(event) => setForm({ ...form, emergencyContactPhone: event.target.value })} />
+        </EditField>
+        <div className="sm:col-span-2">
+          <EditField label="Email">
+            <Input
+              type="email"
+              value={form.emergencyContactEmail}
+              onChange={(event) => setForm({ ...form, emergencyContactEmail: event.target.value })}
+            />
+          </EditField>
+        </div>
+      </div>
+      <EditActions pending={pending} onCancel={onCancel} onSave={save} />
+    </div>
+  );
+};
+
+const EditableDetailRow = ({
+  icon: Icon,
+  label,
+  value,
+  emptyValue,
+  onEdit
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  emptyValue: string;
+  onEdit: () => void;
+}) => (
+  <div className="flex gap-3 rounded-lg bg-brand-background p-3 text-brand-navy">
+    <Icon className="mt-0.5 h-5 w-5 shrink-0" />
+    <div className="min-w-0 flex-1">
+      <p className="text-xs font-bold uppercase tracking-wide opacity-70">{label}</p>
+      <p className={cn("mt-1 font-medium", !value && "text-slate-500")}>{value || emptyValue}</p>
+    </div>
+    <button
+      type="button"
+      aria-label={`Edit ${label}`}
+      onClick={onEdit}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-500 hover:bg-white hover:text-brand-navy focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+    >
+      <Pencil className="h-4 w-4" />
+    </button>
+  </div>
+);
+
+const EditField = ({ label, children }: { label: string; children: ReactNode }) => (
+  <div className="grid gap-1.5">
+    <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</Label>
+    {children}
+  </div>
+);
+
+const EditActions = ({
+  pending,
+  onCancel,
+  onSave
+}: {
+  pending: boolean;
+  onCancel: () => void;
+  onSave: () => void;
+}) => (
+  <div className="mt-4 flex justify-end gap-2">
+    <Button type="button" variant="outline" disabled={pending} onClick={onCancel}>
+      Cancel
+    </Button>
+    <Button type="button" disabled={pending} onClick={onSave} className="bg-brand-primary hover:bg-brand-primaryHover">
+      {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+      Save
+    </Button>
+  </div>
+);
+
+const diffValues = (
+  initial: Record<string, string | number | null>,
+  next: Record<string, string | number | null>
+): Record<string, unknown> =>
+  Object.entries(next).reduce<Record<string, unknown>>((diff, [key, value]) => {
+    if (initial[key] !== value) {
+      diff[key] = value;
+    }
+
+    return diff;
+  }, {});
 
 const DetailRow = ({
   icon: Icon,
