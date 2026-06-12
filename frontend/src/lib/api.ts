@@ -71,6 +71,8 @@ export interface RecentActivityEvent {
   eventType: "check_in" | "sign_out" | string;
   personName: string;
   membershipTier: string;
+  checkedInAt: string;
+  signedOutAt: string | null;
   timestamp: string;
   numGuests: number;
 }
@@ -206,6 +208,11 @@ export interface MemberDetail {
     guestPassesUsedToday: number;
   };
   family: MemberDetailFamilyMember[];
+  hiddenMembers: Array<{
+    personId: string;
+    name: string;
+    relationship: string;
+  }>;
   history: MemberHistoryEvent[];
 }
 
@@ -331,15 +338,10 @@ export interface WebhookEventListItem {
   id: string;
   endpoint: WebhookEndpoint;
   status: WebhookEventStatus;
-  errorMessage: string | null;
   replayOfId: string | null;
   receivedAt: string;
   processedAt: string | null;
-  payloadPreview: string;
-}
-
-export interface WebhookEventDetail extends WebhookEventListItem {
-  rawPayload: unknown;
+  memberName: string;
 }
 
 export const postLogin = async (pin: string): Promise<LoginResponse> => {
@@ -416,11 +418,6 @@ export const fetchWebhookEvents = async (params: {
   return response.data;
 };
 
-export const fetchWebhookEvent = async (id: string): Promise<{ event: WebhookEventDetail }> => {
-  const response = await api.get<{ event: WebhookEventDetail }>(`/admin/webhooks/${id}`);
-  return response.data;
-};
-
 export const replayWebhookEvent = async (
   id: string
 ): Promise<{ replayedEventId: string; status: WebhookEventStatus; statusCode: number }> => {
@@ -435,6 +432,29 @@ export const patchPerson = async (
   body: Record<string, unknown>
 ): Promise<{ person: Record<string, unknown> }> => {
   const response = await api.patch<{ person: Record<string, unknown> }>(`/members/persons/${personId}`, body);
+  return response.data;
+};
+
+export interface AddPersonResponse {
+  person: { id: string; firstName: string; lastName: string };
+  maxMembersIncreasedTo?: number;
+}
+
+export const postAddPerson = async (
+  membershipId: string,
+  body: Record<string, unknown>
+): Promise<AddPersonResponse> => {
+  const response = await api.post<AddPersonResponse>(`/members/memberships/${membershipId}/persons`, body);
+  return response.data;
+};
+
+export const deletePerson = async (personId: string): Promise<{ personId: string; status: string }> => {
+  const response = await api.delete<{ personId: string; status: string }>(`/members/persons/${personId}`);
+  return response.data;
+};
+
+export const restorePerson = async (personId: string): Promise<{ personId: string; status: string }> => {
+  const response = await api.patch<{ personId: string; status: string }>(`/members/persons/${personId}/restore`);
   return response.data;
 };
 

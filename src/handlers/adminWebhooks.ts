@@ -7,7 +7,7 @@ import { signOutHandler } from "./signout";
 import { signupHandler } from "./signup";
 import { prisma } from "../lib/prisma";
 import {
-  buildWebhookPayloadPreview,
+  extractWebhookMemberName,
   replayWebhookEvent,
   WEBHOOK_ENDPOINTS,
   type WebhookEndpoint
@@ -41,11 +41,13 @@ const webhookHandlers: Record<WebhookEndpoint, RequestHandler> = {
   guestpass: guestPassPurchaseHandler
 };
 
+// List rows are owner-facing: no raw payload, no technical error text, no PII
+// beyond the member's name. Full details stay on the detail endpoint for
+// developer debugging.
 const serializeWebhookEvent = (event: {
   id: string;
   endpoint: string;
   status: WebhookEventStatus;
-  errorMessage: string | null;
   replayOfId: string | null;
   receivedAt: Date;
   processedAt: Date | null;
@@ -54,11 +56,10 @@ const serializeWebhookEvent = (event: {
   id: event.id,
   endpoint: event.endpoint,
   status: event.status,
-  errorMessage: event.errorMessage,
   replayOfId: event.replayOfId,
   receivedAt: event.receivedAt.toISOString(),
   processedAt: event.processedAt?.toISOString() ?? null,
-  payloadPreview: buildWebhookPayloadPreview(event.rawPayload)
+  memberName: extractWebhookMemberName(event.rawPayload)
 });
 
 export const listWebhookEvents: RequestHandler = async (req, res, next) => {
@@ -78,7 +79,6 @@ export const listWebhookEvents: RequestHandler = async (req, res, next) => {
         id: true,
         endpoint: true,
         status: true,
-        errorMessage: true,
         replayOfId: true,
         receivedAt: true,
         processedAt: true,
@@ -121,6 +121,7 @@ export const getWebhookEvent: RequestHandler = async (req, res, next) => {
     res.json({
       event: {
         ...serializeWebhookEvent(event),
+        errorMessage: event.errorMessage,
         rawPayload: event.rawPayload
       }
     });

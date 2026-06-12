@@ -4,7 +4,14 @@ import { prisma } from "../lib/prisma";
 import { getNewYorkTodayBounds } from "../lib/timezone";
 import { HttpError } from "../middleware/errorHandler";
 import { jwtAuth, type StaffResponse } from "../middleware/jwtAuth";
-import { updateMembershipAddress, updateMembershipEmergency, updatePerson } from "../handlers/memberEdit";
+import {
+  addPersonToMembership,
+  restorePerson,
+  softDeletePerson,
+  updateMembershipAddress,
+  updateMembershipEmergency,
+  updatePerson
+} from "../handlers/memberEdit";
 import { adminRouter } from "./admin";
 import { authRouter } from "./auth";
 import { dashboardRouter } from "./dashboard";
@@ -108,6 +115,7 @@ membershipsRouter.get("/", async (req, res, next) => {
           ? {
               persons: {
                 some: {
+                  status: "ACTIVE",
                   OR: [
                     { firstName: { contains: q, mode: "insensitive" } },
                     { lastName: { contains: q, mode: "insensitive" } },
@@ -128,6 +136,7 @@ membershipsRouter.get("/", async (req, res, next) => {
         guestPassesTotal: true,
         guestPassesUsed: true,
         persons: {
+          where: { status: "ACTIVE" },
           orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
           select: {
             id: true,
@@ -185,6 +194,7 @@ membersRouter.get("/", async (req, res, next) => {
     const persons = await prisma.person.findMany({
       where: {
         clubId,
+        status: "ACTIVE", // soft-deleted members are hidden from search
         ...(q
           ? {
               OR: [
@@ -252,6 +262,9 @@ membersRouter.get("/", async (req, res, next) => {
 });
 
 membersRouter.patch("/persons/:id", updatePerson);
+membersRouter.delete("/persons/:id", softDeletePerson);
+membersRouter.patch("/persons/:id/restore", restorePerson);
+membersRouter.post("/memberships/:membershipId/persons", addPersonToMembership);
 membersRouter.patch("/memberships/:id/address", updateMembershipAddress);
 membersRouter.patch("/memberships/:id/emergency", updateMembershipEmergency);
 
@@ -406,25 +419,34 @@ membersRouter.get("/:id", async (req, res, next) => {
           currentGuestsInPool,
           guestPassesUsedToday
         },
-        family: person.membership.persons.map((familyMember) => ({
-          personId: familyMember.id,
-          firstName: familyMember.firstName,
-          lastName: familyMember.lastName,
-          name: fullName(familyMember),
-          email: familyMember.email ?? "",
-          phone: familyMember.phone ?? "",
-          age: familyMember.age,
-          relationship: familyMember.relationship,
-          allergies: familyMember.allergies ?? "",
-          emergencyContactName: familyMember.emergencyContactName ?? "",
-          emergencyContactPhone: familyMember.emergencyContactPhone ?? "",
-          emergencyContactEmail: familyMember.emergencyContactEmail ?? "",
-          notes: familyMember.notes ?? "",
-          isPrimary: familyMember.isPrimary,
-          status: familyMember.status,
-          isCurrentlyIn: familyMember.checkinEvents.length > 0,
-          checkedInAt: familyMember.checkinEvents[0]?.checkedInAt.toISOString() ?? null
-        })),
+        family: person.membership.persons
+          .filter((familyMember) => familyMember.status === "ACTIVE")
+          .map((familyMember) => ({
+            personId: familyMember.id,
+            firstName: familyMember.firstName,
+            lastName: familyMember.lastName,
+            name: fullName(familyMember),
+            email: familyMember.email ?? "",
+            phone: familyMember.phone ?? "",
+            age: familyMember.age,
+            relationship: familyMember.relationship,
+            allergies: familyMember.allergies ?? "",
+            emergencyContactName: familyMember.emergencyContactName ?? "",
+            emergencyContactPhone: familyMember.emergencyContactPhone ?? "",
+            emergencyContactEmail: familyMember.emergencyContactEmail ?? "",
+            notes: familyMember.notes ?? "",
+            isPrimary: familyMember.isPrimary,
+            status: familyMember.status,
+            isCurrentlyIn: familyMember.checkinEvents.length > 0,
+            checkedInAt: familyMember.checkinEvents[0]?.checkedInAt.toISOString() ?? null
+          })),
+        hiddenMembers: person.membership.persons
+          .filter((familyMember) => familyMember.status === "INACTIVE")
+          .map((familyMember) => ({
+            personId: familyMember.id,
+            name: fullName(familyMember),
+            relationship: familyMember.relationship
+          })),
         history: person.checkinEvents.map((event) => ({
           eventId: event.id,
           eventType: event.signedOutAt ? "sign_out" : event.eventType,

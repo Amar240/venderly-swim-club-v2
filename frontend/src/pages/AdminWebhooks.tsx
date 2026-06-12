@@ -5,13 +5,6 @@ import { toast } from "sonner";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle
-} from "../components/ui/dialog";
-import {
   Table,
   TableBody,
   TableCell,
@@ -20,17 +13,27 @@ import {
   TableRow
 } from "../components/ui/table";
 import {
-  fetchWebhookEvent,
   fetchWebhookEvents,
   replayWebhookEvent,
+  type WebhookEndpoint,
   type WebhookEventListItem,
   type WebhookEventStatus
 } from "../lib/api";
-import { cn } from "../lib/utils";
 
 type StatusFilter = "ALL" | "FAILED" | "PROCESSED";
 
-const statusFilters: StatusFilter[] = ["ALL", "FAILED", "PROCESSED"];
+const statusFilters: Array<{ value: StatusFilter; label: string }> = [
+  { value: "ALL", label: "All" },
+  { value: "FAILED", label: "Failed" },
+  { value: "PROCESSED", label: "Worked" }
+];
+
+const ENDPOINT_LABELS: Record<WebhookEndpoint, string> = {
+  signup: "New Signup",
+  checkin: "Check-In",
+  signout: "Sign-Out",
+  guestpass: "Guest Pass"
+};
 
 const formatTime = (value: string): string =>
   new Date(value).toLocaleString([], {
@@ -39,6 +42,17 @@ const formatTime = (value: string): string =>
     hour: "numeric",
     minute: "2-digit"
   });
+
+const statusLabel = (status: WebhookEventStatus): string => {
+  switch (status) {
+    case "PROCESSED":
+      return "Worked";
+    case "FAILED":
+      return "Failed";
+    case "RECEIVED":
+      return "Processing";
+  }
+};
 
 const statusBadgeClass = (status: WebhookEventStatus): string => {
   switch (status) {
@@ -53,7 +67,6 @@ const statusBadgeClass = (status: WebhookEventStatus): string => {
 
 export const AdminWebhooks = () => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("FAILED");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const webhooksQuery = useQuery({
     queryKey: ["admin", "webhooks", statusFilter],
@@ -64,19 +77,14 @@ export const AdminWebhooks = () => {
       }),
     refetchInterval: 10_000
   });
-  const detailQuery = useQuery({
-    queryKey: ["admin", "webhooks", "detail", selectedId],
-    enabled: Boolean(selectedId),
-    queryFn: () => fetchWebhookEvent(selectedId ?? "")
-  });
   const replayMutation = useMutation({
     mutationFn: replayWebhookEvent,
     onSuccess: async (data) => {
-      toast.success(`Replay finished: ${data.status}`);
+      toast.success(data.status === "PROCESSED" ? "Fixed! The record went through." : "Still not working. Contact support.");
       await queryClient.invalidateQueries({ queryKey: ["admin", "webhooks"] });
     },
     onError: () => {
-      toast.error("Couldn't replay webhook");
+      toast.error("Couldn't retry right now. Try again in a minute.");
     }
   });
   const events = webhooksQuery.data?.events ?? [];
@@ -88,32 +96,29 @@ export const AdminWebhooks = () => {
       })),
     [events]
   );
-  const rawPayload = detailQuery.data?.event.rawPayload;
 
   const replay = (event: WebhookEventListItem) => {
-    if (!window.confirm(`Replay ${event.endpoint} webhook from ${formatTime(event.receivedAt)}?`)) {
-      return;
-    }
-
     replayMutation.mutate(event.id);
   };
 
   return (
-    <main className="mx-auto max-w-6xl p-4 md:p-6">
+    <main className="mx-auto max-w-5xl p-4 md:p-6">
       <div>
-        <h1 className="text-3xl font-bold text-brand-navy">Webhook Events</h1>
-        <p className="mt-1 text-sm text-slate-500">Incoming GHL payloads, processing status, and replay tools.</p>
+        <h1 className="text-3xl font-bold text-brand-navy">Form Submissions</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Every signup, check-in, sign-out, and guest pass purchase that came in from the online forms.
+        </p>
       </div>
 
       <div className="mt-6 flex flex-wrap gap-2">
-        {statusFilters.map((status) => (
+        {statusFilters.map((filter) => (
           <Button
-            key={status}
+            key={filter.value}
             type="button"
-            variant={statusFilter === status ? "default" : "outline"}
-            onClick={() => setStatusFilter(status)}
+            variant={statusFilter === filter.value ? "default" : "outline"}
+            onClick={() => setStatusFilter(filter.value)}
           >
-            {status === "ALL" ? "All" : status === "FAILED" ? "Failed" : "Processed"}
+            {filter.label}
           </Button>
         ))}
       </div>
@@ -123,51 +128,38 @@ export const AdminWebhooks = () => {
           <TableHeader>
             <TableRow>
               <TableHead>Time</TableHead>
-              <TableHead>Endpoint</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Member</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Payload</TableHead>
-              <TableHead>Error</TableHead>
-              <TableHead className="w-28 text-right">Replay</TableHead>
+              <TableHead className="w-32 text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {webhooksQuery.isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-slate-500">
-                  Loading webhook events...
+                <TableCell colSpan={5} className="py-10 text-center text-slate-500">
+                  Loading...
                 </TableCell>
               </TableRow>
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-slate-500">
-                  No webhook events found.
+                <TableCell colSpan={5} className="py-10 text-center text-slate-500">
+                  {statusFilter === "FAILED" ? "Nothing has failed. All good!" : "No activity yet."}
                 </TableCell>
               </TableRow>
             ) : (
               rows.map((event) => (
                 <TableRow key={event.id}>
                   <TableCell className="font-medium text-brand-navy">{event.time}</TableCell>
-                  <TableCell className="capitalize">{event.endpoint}</TableCell>
+                  <TableCell>{ENDPOINT_LABELS[event.endpoint] ?? event.endpoint}</TableCell>
+                  <TableCell className="font-medium text-brand-navy">{event.memberName}</TableCell>
                   <TableCell>
-                    <Badge className={statusBadgeClass(event.status)}>{event.status}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedId(event.id)}
-                      className="max-w-[240px] truncate text-left text-sm font-medium text-brand-primary underline-offset-2 hover:underline"
-                      title={event.payloadPreview || "View payload"}
-                    >
-                      {event.payloadPreview || "View payload"}
-                    </button>
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={cn("block max-w-[280px] truncate text-sm", event.errorMessage ? "text-brand-danger" : "text-slate-400")}
-                      title={event.errorMessage ?? ""}
-                    >
-                      {event.errorMessage ?? "-"}
-                    </span>
+                    <div>
+                      <Badge className={statusBadgeClass(event.status)}>{statusLabel(event.status)}</Badge>
+                      {event.status === "FAILED" && (
+                        <p className="mt-1 text-xs text-slate-500">Something went wrong. Click Replay to try again.</p>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     {event.status === "FAILED" ? (
@@ -189,18 +181,6 @@ export const AdminWebhooks = () => {
           </TableBody>
         </Table>
       </section>
-
-      <Dialog open={Boolean(selectedId)} onOpenChange={(open) => !open && setSelectedId(null)}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Webhook payload</DialogTitle>
-            <DialogDescription>Raw JSON stored before processing.</DialogDescription>
-          </DialogHeader>
-          <pre className="max-h-[60vh] overflow-auto rounded-lg bg-slate-950 p-4 text-xs text-slate-50">
-            {detailQuery.isLoading ? "Loading..." : JSON.stringify(rawPayload ?? {}, null, 2)}
-          </pre>
-        </DialogContent>
-      </Dialog>
     </main>
   );
 };

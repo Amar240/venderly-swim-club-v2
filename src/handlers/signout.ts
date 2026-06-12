@@ -68,6 +68,7 @@ const findPersonByEmail = async (clubId: string, input: SignOutWebhookPayload): 
     where: {
       clubId,
       email: input.email,
+      status: "ACTIVE",
       membership: { status: "ACTIVE" }
     },
     orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
@@ -112,6 +113,7 @@ const findPersonByEmail = async (clubId: string, input: SignOutWebhookPayload): 
     where: {
       id: matchingMembershipPerson.id,
       clubId,
+      status: "ACTIVE",
       membership: { status: "ACTIVE" }
     },
     select: {
@@ -155,6 +157,7 @@ const findHouseholdByEmailOrPhone = async (clubId: string, input: SignOutWebhook
     where: {
       clubId,
       phone,
+      status: "ACTIVE",
       membership: { status: "ACTIVE" }
     },
     orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],

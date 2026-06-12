@@ -1,9 +1,13 @@
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  deletePerson,
   patchAddress,
   patchEmergency,
   patchPerson,
+  postAddPerson,
+  restorePerson,
+  type AddPersonResponse,
   type MemberDetailFamilyMember,
   type MemberDetailResponse
 } from "../lib/api";
@@ -192,6 +196,65 @@ export const useUpdateEmergency = (membershipId: string | undefined, detailPerso
         queryClient.invalidateQueries({ queryKey: ["members"] }),
         queryClient.invalidateQueries({ queryKey: ["memberships"] })
       ]);
+    }
+  });
+};
+
+const useInvalidateMemberData = (detailPersonId: string | null) => {
+  const queryClient = useQueryClient();
+
+  return async (): Promise<void> => {
+    await Promise.all([
+      detailPersonId
+        ? queryClient.invalidateQueries({ queryKey: ["members", "detail", detailPersonId] })
+        : queryClient.invalidateQueries({ queryKey: detailQueryKey }),
+      queryClient.invalidateQueries({ queryKey: ["members"] }),
+      queryClient.invalidateQueries({ queryKey: ["memberships"] })
+    ]);
+  };
+};
+
+export const useAddPerson = (membershipId: string | undefined, detailPersonId: string | null) => {
+  const invalidate = useInvalidateMemberData(detailPersonId);
+
+  return useMutation<AddPersonResponse, unknown, Record<string, unknown>>({
+    mutationFn: (body) => {
+      if (!membershipId) {
+        throw new Error("membershipId is required");
+      }
+
+      return postAddPerson(membershipId, body);
+    },
+    onError: () => {
+      toast.error("Couldn't add the member");
+    },
+    onSettled: async () => {
+      await invalidate();
+    }
+  });
+};
+
+export const useDeletePerson = (detailPersonId: string | null) => {
+  const invalidate = useInvalidateMemberData(detailPersonId);
+
+  return useMutation<{ personId: string; status: string }, unknown, string>({
+    mutationFn: (personId) => deletePerson(personId),
+    onSettled: async () => {
+      await invalidate();
+    }
+  });
+};
+
+export const useRestorePerson = (detailPersonId: string | null) => {
+  const invalidate = useInvalidateMemberData(detailPersonId);
+
+  return useMutation<{ personId: string; status: string }, unknown, string>({
+    mutationFn: (personId) => restorePerson(personId),
+    onError: () => {
+      toast.error("Couldn't restore the member");
+    },
+    onSettled: async () => {
+      await invalidate();
     }
   });
 };

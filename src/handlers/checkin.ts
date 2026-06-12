@@ -133,6 +133,7 @@ const findPersonByEmail = async (clubId: string, email: string, firstName: strin
     where: {
       clubId,
       email,
+      status: "ACTIVE",
       membership: { status: "ACTIVE" }
     },
     orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
@@ -177,6 +178,7 @@ const findPersonByEmail = async (clubId: string, email: string, firstName: strin
     where: {
       id: matchingMembershipPerson.id,
       clubId,
+      status: "ACTIVE",
       membership: { status: "ACTIVE" }
     },
     select: {
@@ -216,6 +218,7 @@ const findPersonByPhone = async (clubId: string, phone: string | undefined): Pro
     where: {
       clubId,
       phone,
+      status: "ACTIVE",
       membership: { status: "ACTIVE" }
     },
     orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
@@ -258,6 +261,7 @@ const findPersonByMembershipName = async (
     where: {
       clubId,
       isPrimary: true,
+      status: "ACTIVE",
       membership: { status: "ACTIVE" }
     },
     select: {
@@ -307,6 +311,7 @@ const findPersonByMembershipName = async (
     where: {
       id: matchingFamilyPerson.id,
       clubId,
+      status: "ACTIVE",
       membership: { status: "ACTIVE" }
     },
     select: {
@@ -363,6 +368,8 @@ const selectBatchHousehold = {
       guestPassesTotal: true,
       guestPassesUsed: true,
       persons: {
+        // INACTIVE (soft-deleted) members must not match batch check-in names
+        where: { status: "ACTIVE" },
         select: {
           id: true,
           firstName: true,
@@ -383,7 +390,8 @@ const findHouseholdForBatch = async (clubId: string, input: CheckInWebhookPayloa
   const emailMatch = await prisma.person.findFirst({
     where: {
       clubId,
-      email: input.email
+      email: input.email,
+      status: "ACTIVE"
     },
     orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
     select: selectBatchHousehold
@@ -402,7 +410,8 @@ const findHouseholdForBatch = async (clubId: string, input: CheckInWebhookPayloa
   return prisma.person.findFirst({
     where: {
       clubId,
-      phone
+      phone,
+      status: "ACTIVE"
     },
     orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
     select: selectBatchHousehold

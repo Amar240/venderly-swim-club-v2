@@ -30,6 +30,7 @@ export const SettingsMenu = () => {
   const logout = useLogout();
   const { soundEnabled, toggleSound } = useUiPrefs();
   const [capacityDialogOpen, setCapacityDialogOpen] = useState(false);
+  const [signOutDialogOpen, setSignOutDialogOpen] = useState(false);
   const [capacityInput, setCapacityInput] = useState("");
   const queryClient = useQueryClient();
   const summary = useDashboardSummary().data;
@@ -49,11 +50,6 @@ export const SettingsMenu = () => {
     }
   }, [capacityDialogOpen, summary]);
 
-  const signOut = () => {
-    if (window.confirm("Sign out?")) {
-      logout();
-    }
-  };
 
   const saveCapacity = () => {
     const capacity = Number.parseInt(capacityInput, 10);
@@ -88,12 +84,36 @@ export const SettingsMenu = () => {
             Pool capacity
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={signOut} className="min-h-11 text-brand-danger focus:text-brand-danger">
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault();
+              setSignOutDialogOpen(true);
+            }}
+            className="min-h-11 text-brand-danger focus:text-brand-danger"
+          >
             <LogOut className="h-4 w-4" />
             Sign out
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <Dialog open={signOutDialogOpen} onOpenChange={setSignOutDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Sign out of the dashboard?</DialogTitle>
+            <DialogDescription>You will need a staff PIN to sign back in.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={() => setSignOutDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={logout} className="bg-brand-danger text-white hover:bg-brand-danger/90">
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={capacityDialogOpen} onOpenChange={setCapacityDialogOpen}>
         <DialogContent>

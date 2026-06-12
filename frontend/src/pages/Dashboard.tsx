@@ -10,7 +10,16 @@ import { CapacityBanner } from "../components/CapacityBanner";
 import { MemberDetailSheet } from "../components/MemberDetailSheet";
 import { StatCard } from "../components/StatCard";
 import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
 import { useActiveCheckins, useDashboardSearch, useDashboardSummary, useManualSignout, useRecentActivity } from "../hooks/useDashboard";
@@ -48,15 +57,22 @@ export const Dashboard = () => {
     setSelectedPersonId(personId);
   };
 
+  const [confirmSignOut, setConfirmSignOut] = useState<{ personId: string; name: string } | null>(null);
+
   const signOut = (personId: string, name: string): void => {
-    if (!window.confirm(`Sign out ${name}? They might still be at the pool.`)) {
+    setConfirmSignOut({ personId, name });
+  };
+
+  const performSignOut = (): void => {
+    if (!confirmSignOut) {
       return;
     }
 
-    manualSignout.mutate(personId, {
+    manualSignout.mutate(confirmSignOut.personId, {
       onSuccess: (result) => toast.success(result.message),
       onError: () => toast.error("Could not sign out this member.")
     });
+    setConfirmSignOut(null);
   };
 
   return (
@@ -133,7 +149,7 @@ export const Dashboard = () => {
           ) : null}
         </div>
 
-        <section className={cn("grid gap-6 lg:grid-cols-3", panelClass)}>
+        <section className={cn("grid gap-6 lg:grid-cols-3 lg:items-start", panelClass)}>
           <DashboardColumn title="Currently In Pool">
             {activeQuery.isLoading ? (
               <SkeletonList />
@@ -176,6 +192,22 @@ export const Dashboard = () => {
           </div>
         </section>
       </main>
+      <Dialog open={confirmSignOut !== null} onOpenChange={(open) => !open && setConfirmSignOut(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Sign out {confirmSignOut?.name}?</DialogTitle>
+            <DialogDescription>They might still be at the pool.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={() => setConfirmSignOut(null)}>
+              Cancel
+            </Button>
+            <Button onClick={performSignOut} disabled={manualSignout.isPending} className="bg-brand-primary hover:bg-brand-primaryHover">
+              Sign out
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <MemberDetailSheet personId={selectedPersonId} open={Boolean(selectedPersonId)} onOpenChange={(open) => !open && setSelectedPersonId(null)} />
     </>
   );
@@ -221,7 +253,8 @@ const DashboardColumn = ({ title, children }: { title: string; children: ReactNo
     <CardHeader>
       <CardTitle className="text-lg text-brand-navy">{title}</CardTitle>
     </CardHeader>
-    <CardContent className="space-y-3">{children}</CardContent>
+    {/* Long lists scroll inside the card so the page (and search bar) stay put */}
+    <CardContent className="max-h-[32rem] space-y-3 overflow-y-auto pr-2">{children}</CardContent>
   </Card>
 );
 

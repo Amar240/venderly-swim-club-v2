@@ -2,6 +2,7 @@ import "dotenv/config";
 import { createApp } from "./app";
 import { startAutoSignoutJob } from "./lib/autoSignout";
 import { startEmailDigestJob } from "./lib/emailDigest";
+import { startWebhookCleanupJob } from "./lib/webhookCleanup";
 import { logger } from "./lib/logger";
 
 const app = createApp();
@@ -11,4 +12,5 @@ app.listen(port, () => {
   logger.info("Swim club API listening", { port });
   startAutoSignoutJob();
   startEmailDigestJob();
+  startWebhookCleanupJob();
 });

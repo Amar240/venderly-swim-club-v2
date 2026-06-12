@@ -1,12 +1,33 @@
+import axios from "axios";
 import { format } from "date-fns";
-import { CalendarDays, CreditCard, Loader2, MapPin, Pencil, Phone, Ticket, X, type LucideIcon } from "lucide-react";
+import {
+  CalendarDays,
+  CreditCard,
+  Loader2,
+  MapPin,
+  Pencil,
+  Phone,
+  Ticket,
+  Trash2,
+  Undo2,
+  UserPlus,
+  X,
+  type LucideIcon
+} from "lucide-react";
 import { motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useManualSignout } from "../hooks/useDashboard";
 import { useManualCheckin } from "../hooks/useManualCheckin";
-import { useUpdateAddress, useUpdateEmergency, useUpdatePerson } from "../hooks/useMemberEdit";
+import {
+  useAddPerson,
+  useDeletePerson,
+  useRestorePerson,
+  useUpdateAddress,
+  useUpdateEmergency,
+  useUpdatePerson
+} from "../hooks/useMemberEdit";
 import { useMemberDetail } from "../hooks/useMembers";
 import { useMotion } from "../hooks/useMotion";
 import type { MemberDetail, MemberDetailFamilyMember, MemberDetailResponse } from "../lib/api";
@@ -16,6 +37,7 @@ import { GuestPassBar } from "./GuestPassBar";
 import { StatusDot } from "./StatusDot";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ScrollArea } from "./ui/scroll-area";
@@ -148,6 +170,9 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
   const [guestCount, setGuestCount] = useState(0);
   const [localActiveGuests, setLocalActiveGuests] = useState<Record<string, number>>({});
   const [editing, setEditing] = useState<EditingSection>(null);
+  const [addingMember, setAddingMember] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<MemberDetailFamilyMember | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
   const clickedRowRef = useRef<HTMLDivElement | null>(null);
   const { reduced } = useMotion();
   const manualCheckin = useManualCheckin();
@@ -155,6 +180,9 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
   const personMutation = useUpdatePerson(clickedPersonId, editing?.type === "person" ? editing.personId : "");
   const addressMutation = useUpdateAddress(member.membership.membershipId, clickedPersonId);
   const emergencyMutation = useUpdateEmergency(member.membership.membershipId, clickedPersonId);
+  const addPersonMutation = useAddPerson(member.membership.membershipId, clickedPersonId);
+  const deletePersonMutation = useDeletePerson(clickedPersonId);
+  const restorePersonMutation = useRestorePerson(clickedPersonId);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -162,7 +190,33 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
     setGuestCount(0);
     setLocalActiveGuests({});
     setEditing(null);
+    setAddingMember(false);
+    setConfirmDelete(null);
+    setShowHidden(false);
   }, [member.membership.membershipId]);
+
+  const removePerson = (person: MemberDetailFamilyMember) => {
+    deletePersonMutation.mutate(person.personId, {
+      onSuccess: () => {
+        toast.success(`${person.name} removed. They can be restored anytime.`);
+        setConfirmDelete(null);
+      },
+      onError: (error) => {
+        const code =
+          axios.isAxiosError(error) && typeof error.response?.data?.error?.code === "string"
+            ? error.response.data.error.code
+            : null;
+        toast.error(
+          code === "PERSON_CHECKED_IN"
+            ? "Sign them out before removing them."
+            : code === "CANNOT_DELETE_PRIMARY"
+              ? "The account holder cannot be removed."
+              : "Couldn't remove the member."
+        );
+        setConfirmDelete(null);
+      }
+    });
+  };
 
   useEffect(() => {
     if (clickedRowRef.current) {
@@ -361,6 +415,16 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
+                  {!person.isPrimary && (
+                    <button
+                      type="button"
+                      aria-label={`Remove ${person.name}`}
+                      onClick={() => setConfirmDelete(person)}
+                      className="flex h-11 w-11 items-center justify-center rounded-full text-slate-400 hover:bg-red-50 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                   {person.isCurrentlyIn ? (
                     <Button type="button" variant="outline" disabled={isBusy} onClick={() => signOut(person)} className="shrink-0">
                       Sign Out
@@ -375,6 +439,76 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
               </div>
             );
           })}
+          {addingMember ? (
+            <AddMemberForm
+              pending={addPersonMutation.isPending}
+              onCancel={() => setAddingMember(false)}
+              onSave={(body) => {
+                addPersonMutation.mutate(body, {
+                  onSuccess: (result) => {
+                    const name = `${result.person.firstName} ${result.person.lastName}`.trim();
+                    toast.success(
+                      result.maxMembersIncreasedTo !== undefined
+                        ? `${name} added. Membership expanded to ${result.maxMembersIncreasedTo} members.`
+                        : `${name} added.`
+                    );
+                    setAddingMember(false);
+                  }
+                });
+              }}
+            />
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setAddingMember(true)}
+              className="h-11 w-full border-dashed border-brand-border text-brand-navy"
+            >
+              <UserPlus className="h-4 w-4" />
+              Add member
+            </Button>
+          )}
+          {member.hiddenMembers.length > 0 && (
+            <div className="rounded-xl border border-dashed border-brand-border">
+              <button
+                type="button"
+                onClick={() => setShowHidden((value) => !value)}
+                className="flex min-h-11 w-full items-center justify-between px-4 text-left text-sm font-semibold text-slate-500"
+              >
+                Hidden members ({member.hiddenMembers.length})
+                <span className="text-brand-primary">{showHidden ? "Hide" : "Show"}</span>
+              </button>
+              {showHidden && (
+                <div className="space-y-2 border-t border-dashed border-brand-border p-3">
+                  {member.hiddenMembers.map((hidden) => (
+                    <div
+                      key={hidden.personId}
+                      className="flex items-center justify-between rounded-lg bg-brand-background/50 p-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-slate-500">{hidden.name}</p>
+                        <p className="text-xs text-slate-400">{hidden.relationship}</p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={restorePersonMutation.isPending}
+                        onClick={() =>
+                          restorePersonMutation.mutate(hidden.personId, {
+                            onSuccess: () => toast.success(`${hidden.name} restored.`)
+                          })
+                        }
+                        className="h-11 shrink-0 border-brand-border"
+                      >
+                        <Undo2 className="h-4 w-4" />
+                        Restore
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {member.membership.currentGuestsInPool > 0 ? (
             <div className="mt-2 flex items-center gap-2 rounded-lg bg-brand-background/60 px-4 py-3 text-sm text-slate-600">
               <Ticket className="h-4 w-4 text-brand-primary" aria-hidden />
@@ -383,6 +517,31 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
           ) : null}
         </div>
       </section>
+
+      <Dialog open={confirmDelete !== null} onOpenChange={(dialogOpen) => !dialogOpen && setConfirmDelete(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove {confirmDelete?.name} from this membership?</DialogTitle>
+            <DialogDescription>
+              They can be restored later. This does not delete their visit history.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button type="button" variant="outline" disabled={deletePersonMutation.isPending} onClick={() => setConfirmDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={deletePersonMutation.isPending}
+              onClick={() => confirmDelete && removePerson(confirmDelete)}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              {deletePersonMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <section className="space-y-3">
         <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Details</h3>
@@ -543,6 +702,80 @@ const PersonEditForm = ({
             <Input value={form.allergies} onChange={(event) => setForm({ ...form, allergies: event.target.value })} />
           </EditField>
         </div>
+      </div>
+      <EditActions pending={pending} onCancel={onCancel} onSave={save} />
+    </div>
+  );
+};
+
+const AddMemberForm = ({
+  pending,
+  onCancel,
+  onSave
+}: {
+  pending: boolean;
+  onCancel: () => void;
+  onSave: (body: Record<string, unknown>) => void;
+}) => {
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    age: "",
+    relationship: "family_member"
+  });
+
+  const save = () => {
+    if (!form.firstName.trim()) {
+      toast.error("First name is required");
+      return;
+    }
+
+    const ageText = form.age.trim();
+    const parsedAge = ageText === "" ? undefined : Number.parseInt(ageText, 10);
+
+    if (parsedAge !== undefined && (!Number.isInteger(parsedAge) || parsedAge < 0 || parsedAge > 120)) {
+      toast.error("Enter an age from 0 to 120");
+      return;
+    }
+
+    onSave({
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      email: form.email.trim(),
+      phone: form.phone,
+      ...(parsedAge !== undefined ? { age: parsedAge } : {}),
+      relationship: form.relationship.trim() || "family_member"
+    });
+  };
+
+  return (
+    <div className="rounded-xl border border-brand-border bg-brand-background p-4">
+      <p className="mb-3 text-sm font-semibold text-brand-navy">Add a member to this household</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <EditField label="First name">
+          <Input autoFocus value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} />
+        </EditField>
+        <EditField label="Last name">
+          <Input value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} />
+        </EditField>
+        <EditField label="Email (optional)">
+          <Input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+        </EditField>
+        <EditField label="Phone (optional)">
+          <Input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
+        </EditField>
+        <EditField label="Age (optional)">
+          <Input
+            inputMode="numeric"
+            value={form.age}
+            onChange={(event) => setForm({ ...form, age: event.target.value.replace(/[^\d]/g, "") })}
+          />
+        </EditField>
+        <EditField label="Relationship">
+          <Input value={form.relationship} onChange={(event) => setForm({ ...form, relationship: event.target.value })} />
+        </EditField>
       </div>
       <EditActions pending={pending} onCancel={onCancel} onSave={save} />
     </div>

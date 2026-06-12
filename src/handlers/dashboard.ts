@@ -182,8 +182,16 @@ export const getRecentCheckinEvents: RequestHandler = async (req, res, next) => 
     const staffResponse = res as StaffResponse;
     const clubId = getStaffClubId(staffResponse);
     const { limit } = recentQuerySchema.parse(req.query);
+    // "Recent Activity" means today: events from previous days are history, not activity.
+    const todayBounds = getNewYorkTodayBounds();
     const checkins = await prisma.checkinEvent.findMany({
-      where: { clubId },
+      where: {
+        clubId,
+        OR: [
+          { checkedInAt: { gte: todayBounds.start, lt: todayBounds.end } },
+          { signedOutAt: { gte: todayBounds.start, lt: todayBounds.end } }
+        ]
+      },
       orderBy: { updatedAt: "desc" },
       take: limit,
       select: {
@@ -212,6 +220,9 @@ export const getRecentCheckinEvents: RequestHandler = async (req, res, next) => 
         eventType: event.signedOutAt ? "sign_out" : event.eventType,
         personName: fullName(event.person),
         membershipTier: event.person.membership.tier,
+        // One row per visit: both halves of the check-in/sign-out pair.
+        checkedInAt: event.checkedInAt.toISOString(),
+        signedOutAt: event.signedOutAt?.toISOString() ?? null,
         timestamp: (event.signedOutAt ?? event.checkedInAt).toISOString(),
         numGuests: event.numGuests
       }))
@@ -231,6 +242,7 @@ export const searchMembers: RequestHandler = async (req, res, next) => {
     const persons = await prisma.person.findMany({
       where: {
         clubId,
+        status: "ACTIVE", // soft-deleted members are hidden from dashboard search
         OR: [
           { firstName: { contains: q, mode: "insensitive" } },
           { lastName: { contains: q, mode: "insensitive" } },
@@ -411,7 +423,7 @@ export const manualCheckin: RequestHandler = async (req, res, next) => {
     const { personId, numGuests } = manualCheckinSchema.parse(req.body);
 
     const person = await prisma.person.findFirst({
-      where: { id: personId, clubId },
+      where: { id: personId, clubId, status: "ACTIVE" },
       select: {
         id: true,
         firstName: true,

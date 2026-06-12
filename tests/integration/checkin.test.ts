@@ -103,6 +103,18 @@ describe("POST /webhooks/ghl/checkin (integration)", () => {
       expect(await prisma.checkinEvent.count()).toBe(1);
     });
 
+    it("rejects soft-deleted members by name (removed people cannot QR in)", async () => {
+      const { persons } = await seedMembership({ clubId, maxMembers: 4, persons: HOUSEHOLD });
+      const tyler = persons.find((person) => person.firstName === "Tyler");
+      await prisma.person.update({ where: { id: tyler!.id }, data: { status: "INACTIVE" } });
+
+      const response = await postCheckin(buildBatchCheckinPayload(["Donna Phillips", "Tyler Phillips"]));
+
+      expect(response.body).toMatchObject({ valid: false, code: "BATCH_NAME_UNMATCHED" });
+      expect(response.body.message).toContain("Tyler Phillips");
+      expect(await prisma.checkinEvent.count()).toBe(0);
+    });
+
     it("rejects the batch when it would exceed membership capacity", async () => {
       await seedMembership({ clubId, maxMembers: 2, persons: HOUSEHOLD });
 

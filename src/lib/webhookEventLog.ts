@@ -78,25 +78,19 @@ export const resolveWebhookClubId = async (payload: unknown): Promise<string | n
   }
 };
 
-export const buildWebhookPayloadPreview = (payload: unknown): string => {
+/** Friendly member name for the admin list: name, then email, then a dash. */
+export const extractWebhookMemberName = (payload: unknown): string => {
   if (!isRecord(payload)) {
-    return "";
+    return "—";
   }
 
-  const firstName = getString(payload.first_name);
-  const lastName = getString(payload.last_name);
-  const name = [firstName, lastName].filter(Boolean).join(" ");
-  const email = getString(payload.email);
-  const contactId = getString(payload.contact_id) ?? getString(payload.contactId);
-  const locationId = getWebhookLocationId(payload);
-  const parts = [
-    name ? `Name: ${name}` : undefined,
-    email ? `Email: ${email}` : undefined,
-    contactId ? `Contact: ${contactId}` : undefined,
-    locationId ? `Location: ${locationId}` : undefined
-  ].filter(Boolean);
+  const name = [getString(payload.first_name), getString(payload.last_name)].filter(Boolean).join(" ");
 
-  return parts.join(" · ");
+  if (name) {
+    return name;
+  }
+
+  return getString(payload.email) ?? "—";
 };
 
 const createReceivedEvent = async (

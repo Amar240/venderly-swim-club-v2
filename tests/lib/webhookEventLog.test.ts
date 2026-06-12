@@ -22,7 +22,7 @@ vi.mock("../../src/lib/logger", () => ({
 }));
 
 import {
-  buildWebhookPayloadPreview,
+  extractWebhookMemberName,
   getWebhookLocationId,
   replayWebhookEvent,
   trimErrorMessage
@@ -36,17 +36,13 @@ describe("getWebhookLocationId", () => {
   });
 });
 
-describe("buildWebhookPayloadPreview", () => {
-  it("builds a defensive contact preview", () => {
-    expect(
-      buildWebhookPayloadPreview({
-        first_name: "Kelly",
-        last_name: "Oldis",
-        email: "kelly@example.com",
-        contact_id: "contact_1",
-        location: { id: "loc_1" }
-      })
-    ).toBe("Name: Kelly Oldis · Email: kelly@example.com · Contact: contact_1 · Location: loc_1");
+describe("extractWebhookMemberName", () => {
+  it("prefers the member name, falls back to email, then a dash", () => {
+    expect(extractWebhookMemberName({ first_name: "Kelly", last_name: "Oldis" })).toBe("Kelly Oldis");
+    expect(extractWebhookMemberName({ first_name: "Kelly" })).toBe("Kelly");
+    expect(extractWebhookMemberName({ email: "kelly@example.com" })).toBe("kelly@example.com");
+    expect(extractWebhookMemberName({})).toBe("—");
+    expect(extractWebhookMemberName(null)).toBe("—");
   });
 });
 
