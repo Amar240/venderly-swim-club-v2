@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow
 } from "../components/ui/table";
-import { fetchActivity, fetchStaff } from "../lib/api";
+import { fetchActivity, fetchEditActivity, fetchStaff } from "../lib/api";
 
 const todayInputValue = (): string => {
   const now = new Date();
@@ -21,7 +21,17 @@ const todayInputValue = (): string => {
   return `${year}-${month}-${day}`;
 };
 
+const formatChangeValue = (value: string | null): string =>
+  value && value.trim().length > 0 ? value : "—";
+
+const formatFieldName = (field: string): string =>
+  field
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (letter) => letter.toUpperCase())
+    .trim();
+
 export const AdminActivity = () => {
+  const [activeFeed, setActiveFeed] = useState<"checkins" | "edits">("checkins");
   const [staffId, setStaffId] = useState("");
   const [date, setDate] = useState(todayInputValue);
   const staffQuery = useQuery({
@@ -31,10 +41,18 @@ export const AdminActivity = () => {
   const activityQuery = useQuery({
     queryKey: ["admin", "activity", staffId, date],
     queryFn: () => fetchActivity({ staffId: staffId || undefined, date, limit: 100 }),
-    refetchInterval: 10_000
+    refetchInterval: 10_000,
+    enabled: activeFeed === "checkins"
+  });
+  const editActivityQuery = useQuery({
+    queryKey: ["admin", "edits", staffId, date],
+    queryFn: () => fetchEditActivity({ staffId: staffId || undefined, date, limit: 100 }),
+    refetchInterval: 10_000,
+    enabled: activeFeed === "edits"
   });
   const staff = staffQuery.data?.staff ?? [];
   const events = activityQuery.data?.events ?? [];
+  const editEvents = editActivityQuery.data?.events ?? [];
   const formattedRows = useMemo(
     () =>
       events.map((event) => ({
@@ -43,12 +61,41 @@ export const AdminActivity = () => {
       })),
     [events]
   );
+  const formattedEditRows = useMemo(
+    () =>
+      editEvents.map((event) => ({
+        ...event,
+        time: new Date(event.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      })),
+    [editEvents]
+  );
 
   return (
     <main className="mx-auto max-w-6xl p-4 md:p-6">
       <div>
         <h1 className="text-3xl font-bold text-brand-navy">Activity Log</h1>
-        <p className="mt-1 text-sm text-slate-500">Manual check-ins and sign-outs performed by staff.</p>
+        <p className="mt-1 text-sm text-slate-500">Manual check-ins, sign-outs, and member edits by staff.</p>
+      </div>
+
+      <div className="mt-6 inline-flex rounded-lg border border-brand-border bg-white p-1">
+        <button
+          type="button"
+          onClick={() => setActiveFeed("checkins")}
+          className={`h-10 rounded-md px-4 text-sm font-semibold transition-colors ${
+            activeFeed === "checkins" ? "bg-brand-primary text-white" : "text-slate-600 hover:bg-brand-background"
+          }`}
+        >
+          Check-ins
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveFeed("edits")}
+          className={`h-10 rounded-md px-4 text-sm font-semibold transition-colors ${
+            activeFeed === "edits" ? "bg-brand-primary text-white" : "text-slate-600 hover:bg-brand-background"
+          }`}
+        >
+          Edits
+        </button>
       </div>
 
       <section className="mt-6 grid gap-4 rounded-lg border border-brand-border bg-white p-4 sm:grid-cols-2">
@@ -75,50 +122,96 @@ export const AdminActivity = () => {
       </section>
 
       <section className="mt-6 rounded-lg border border-brand-border bg-white">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Time</TableHead>
-              <TableHead>Staff</TableHead>
-              <TableHead>Action</TableHead>
-              <TableHead>Member</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {activityQuery.isLoading ? (
+        {activeFeed === "checkins" ? (
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={4} className="py-10 text-center text-slate-500">
-                  Loading activity...
-                </TableCell>
+                <TableHead>Time</TableHead>
+                <TableHead>Staff</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Member</TableHead>
               </TableRow>
-            ) : formattedRows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} className="py-10 text-center text-slate-500">
-                  No manual activity found.
-                </TableCell>
-              </TableRow>
-            ) : (
-              formattedRows.map((event) => (
-                <TableRow key={`${event.eventId}-${event.actionType}-${event.timestamp}`}>
-                  <TableCell className="font-medium text-brand-navy">{event.time}</TableCell>
-                  <TableCell>{event.staffName}</TableCell>
-                  <TableCell>
-                    <Badge
-                      className={
-                        event.actionType === "manual_checkin"
-                          ? "bg-brand-success text-white"
-                          : "bg-brand-primary text-white"
-                      }
-                    >
-                      {event.actionType === "manual_checkin" ? "Checked in" : "Signed out"}
-                    </Badge>
+            </TableHeader>
+            <TableBody>
+              {activityQuery.isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="py-10 text-center text-slate-500">
+                    Loading activity...
                   </TableCell>
-                  <TableCell>{event.memberName}</TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : formattedRows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="py-10 text-center text-slate-500">
+                    No manual activity found.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                formattedRows.map((event) => (
+                  <TableRow key={`${event.eventId}-${event.actionType}-${event.timestamp}`}>
+                    <TableCell className="font-medium text-brand-navy">{event.time}</TableCell>
+                    <TableCell>{event.staffName}</TableCell>
+                    <TableCell>
+                      <Badge
+                        className={
+                          event.actionType === "manual_checkin"
+                            ? "bg-brand-success text-white"
+                            : "bg-brand-primary text-white"
+                        }
+                      >
+                        {event.actionType === "manual_checkin" ? "Checked in" : "Signed out"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{event.memberName}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Time</TableHead>
+                <TableHead>Staff</TableHead>
+                <TableHead>Member</TableHead>
+                <TableHead>Changes</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {editActivityQuery.isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="py-10 text-center text-slate-500">
+                    Loading edits...
+                  </TableCell>
+                </TableRow>
+              ) : formattedEditRows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="py-10 text-center text-slate-500">
+                    No edits found.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                formattedEditRows.map((event) => (
+                  <TableRow key={event.id}>
+                    <TableCell className="font-medium text-brand-navy">{event.time}</TableCell>
+                    <TableCell>{event.staff.name}</TableCell>
+                    <TableCell>{event.targetLabel}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(event.changes).map(([field, change]) => (
+                          <Badge key={field} variant="outline" className="border-brand-border text-slate-700">
+                            {formatFieldName(field)}: {formatChangeValue(change.from)} →{" "}
+                            {formatChangeValue(change.to)}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        )}
       </section>
     </main>
   );

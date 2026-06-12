@@ -1,4 +1,5 @@
 import type { RequestHandler } from "express";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../middleware/errorHandler";
@@ -45,15 +46,79 @@ export const updateEmergencySchema = z.object({
   emergencyContactEmail: z.union([z.string().trim().email(), z.literal("")]).optional()
 });
 
+export type FieldChanges = Record<string, { from: string | null; to: string | null }>;
+
+const normalizeChangeValue = (value: unknown): string | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return String(value);
+};
+
+export const computeFieldChanges = (
+  before: Record<string, unknown>,
+  after: Record<string, unknown>
+): FieldChanges => {
+  const changes: FieldChanges = {};
+
+  for (const [field, nextValue] of Object.entries(after)) {
+    if (nextValue === undefined) {
+      continue;
+    }
+
+    const from = normalizeChangeValue(before[field]);
+    const to = normalizeChangeValue(nextValue);
+
+    if (from !== to) {
+      changes[field] = { from, to };
+    }
+  }
+
+  return changes;
+};
+
+const fullName = (person: { firstName: string; lastName: string }): string =>
+  `${person.firstName} ${person.lastName}`.trim();
+
+const householdLabel = (persons: Array<{ firstName: string; lastName: string; isPrimary: boolean }>): string => {
+  const primary = persons.find((person) => person.isPrimary) ?? persons[0];
+  const lastName = primary?.lastName?.trim();
+
+  return lastName ? `${lastName} household` : "Household";
+};
+
+const hasChanges = (changes: FieldChanges): boolean => Object.keys(changes).length > 0;
+
 export const updatePerson: RequestHandler = async (req, res, next) => {
   try {
     const staffResponse = res as StaffResponse;
     const clubId = staffResponse.locals.staff.clubId;
+    const staffId = staffResponse.locals.staff.id;
     const { id } = paramsSchema.parse(req.params);
     const input = updatePersonSchema.parse(req.body);
     const existing = await prisma.person.findFirst({
       where: { id, clubId },
-      select: { id: true }
+      select: {
+        id: true,
+        membershipId: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        age: true,
+        relationship: true,
+        allergies: true
+      }
     });
 
     if (!existing) {
@@ -70,19 +135,47 @@ export const updatePerson: RequestHandler = async (req, res, next) => {
     if (input.relationship !== undefined) data.relationship = input.relationship;
     if (input.allergies !== undefined) data.allergies = input.allergies;
 
-    const updated = await prisma.person.update({
-      where: { id },
-      data,
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        phone: true,
-        age: true,
-        relationship: true,
-        allergies: true
-      }
+    const changes = computeFieldChanges(existing, data);
+
+    if (!hasChanges(changes)) {
+      const { membershipId: _membershipId, ...person } = existing;
+      res.json({ person });
+      return;
+    }
+
+    const targetLabel = fullName({
+      firstName: (data.firstName as string | undefined) ?? existing.firstName,
+      lastName: (data.lastName as string | undefined) ?? existing.lastName
+    });
+    const updated = await prisma.$transaction(async (tx) => {
+      const person = await tx.person.update({
+        where: { id },
+        data,
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+          age: true,
+          relationship: true,
+          allergies: true
+        }
+      });
+
+      await tx.memberEditLog.create({
+        data: {
+          clubId,
+          staffId,
+          targetType: "person",
+          personId: id,
+          membershipId: existing.membershipId,
+          targetLabel,
+          changes: changes as Prisma.InputJsonValue
+        }
+      });
+
+      return person;
     });
 
     res.json({ person: updated });
@@ -95,11 +188,27 @@ export const updateMembershipAddress: RequestHandler = async (req, res, next) =>
   try {
     const staffResponse = res as StaffResponse;
     const clubId = staffResponse.locals.staff.clubId;
+    const staffId = staffResponse.locals.staff.id;
     const { id } = paramsSchema.parse(req.params);
     const input = updateAddressSchema.parse(req.body);
     const existing = await prisma.membership.findFirst({
       where: { id, clubId },
-      select: { id: true }
+      select: {
+        id: true,
+        addressStreet: true,
+        addressCity: true,
+        addressState: true,
+        addressPostalCode: true,
+        addressCountry: true,
+        persons: {
+          orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+          select: {
+            firstName: true,
+            lastName: true,
+            isPrimary: true
+          }
+        }
+      }
     });
 
     if (!existing) {
@@ -114,17 +223,41 @@ export const updateMembershipAddress: RequestHandler = async (req, res, next) =>
     if (input.addressPostalCode !== undefined) data.addressPostalCode = input.addressPostalCode || null;
     if (input.addressCountry !== undefined) data.addressCountry = input.addressCountry || null;
 
-    const updated = await prisma.membership.update({
-      where: { id },
-      data,
-      select: {
-        id: true,
-        addressStreet: true,
-        addressCity: true,
-        addressState: true,
-        addressPostalCode: true,
-        addressCountry: true
-      }
+    const changes = computeFieldChanges(existing, data);
+
+    if (!hasChanges(changes)) {
+      const { persons: _persons, ...membership } = existing;
+      res.json({ membership });
+      return;
+    }
+
+    const targetLabel = householdLabel(existing.persons);
+    const updated = await prisma.$transaction(async (tx) => {
+      const membership = await tx.membership.update({
+        where: { id },
+        data,
+        select: {
+          id: true,
+          addressStreet: true,
+          addressCity: true,
+          addressState: true,
+          addressPostalCode: true,
+          addressCountry: true
+        }
+      });
+
+      await tx.memberEditLog.create({
+        data: {
+          clubId,
+          staffId,
+          targetType: "membership_address",
+          membershipId: id,
+          targetLabel,
+          changes: changes as Prisma.InputJsonValue
+        }
+      });
+
+      return membership;
     });
 
     res.json({ membership: updated });
@@ -137,11 +270,25 @@ export const updateMembershipEmergency: RequestHandler = async (req, res, next) 
   try {
     const staffResponse = res as StaffResponse;
     const clubId = staffResponse.locals.staff.clubId;
+    const staffId = staffResponse.locals.staff.id;
     const { id } = paramsSchema.parse(req.params);
     const input = updateEmergencySchema.parse(req.body);
     const membership = await prisma.membership.findFirst({
       where: { id, clubId },
-      select: { id: true }
+      select: {
+        id: true,
+        persons: {
+          orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+          select: {
+            firstName: true,
+            lastName: true,
+            isPrimary: true,
+            emergencyContactName: true,
+            emergencyContactPhone: true,
+            emergencyContactEmail: true
+          }
+        }
+      }
     });
 
     if (!membership) {
@@ -156,9 +303,41 @@ export const updateMembershipEmergency: RequestHandler = async (req, res, next) 
       data.emergencyContactEmail = input.emergencyContactEmail === "" ? null : input.emergencyContactEmail;
     }
 
-    const result = await prisma.person.updateMany({
-      where: { membershipId: id, clubId },
-      data
+    const representative = membership.persons[0] ?? {
+      emergencyContactName: null,
+      emergencyContactPhone: null,
+      emergencyContactEmail: null
+    };
+    const changes = computeFieldChanges(representative, data);
+
+    if (!hasChanges(changes)) {
+      res.json({
+        membershipId: id,
+        updatedCount: 0,
+        ...data
+      });
+      return;
+    }
+
+    const targetLabel = householdLabel(membership.persons);
+    const result = await prisma.$transaction(async (tx) => {
+      const updateResult = await tx.person.updateMany({
+        where: { membershipId: id, clubId },
+        data
+      });
+
+      await tx.memberEditLog.create({
+        data: {
+          clubId,
+          staffId,
+          targetType: "membership_emergency",
+          membershipId: id,
+          targetLabel,
+          changes: changes as Prisma.InputJsonValue
+        }
+      });
+
+      return updateResult;
     });
 
     res.json({

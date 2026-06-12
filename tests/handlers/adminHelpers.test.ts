@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   findActivePinConflict,
   flattenActivityEvents,
+  serializeEditActivityEvents,
   serializeStaff
 } from "../../src/handlers/admin";
 
@@ -88,5 +89,31 @@ describe("serializeStaff", () => {
       isActive: true,
       createdAt: "2026-06-03T12:00:00.000Z"
     });
+  });
+});
+
+describe("serializeEditActivityEvents", () => {
+  it("serializes edit logs for the admin activity feed", () => {
+    expect(
+      serializeEditActivityEvents([
+        {
+          id: "edit_1",
+          createdAt: new Date("2026-06-03T12:00:00Z"),
+          targetType: "person",
+          targetLabel: "Kelly Oldis",
+          staff: { id: "staff_1", name: "Admin" },
+          changes: { age: { from: "40", to: "41" } }
+        }
+      ])
+    ).toEqual([
+      {
+        id: "edit_1",
+        createdAt: "2026-06-03T12:00:00.000Z",
+        targetType: "person",
+        targetLabel: "Kelly Oldis",
+        staff: { id: "staff_1", name: "Admin" },
+        changes: { age: { from: "40", to: "41" } }
+      }
+    ]);
   });
 });

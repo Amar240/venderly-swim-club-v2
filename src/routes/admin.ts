@@ -3,6 +3,7 @@ import {
   createStaff,
   deactivateStaff,
   listActivity,
+  listEditActivity,
   listStaff,
   updateStaff
 } from "../handlers/admin";
@@ -24,6 +25,7 @@ adminRouter.post("/staff", createStaff);
 adminRouter.patch("/staff/:id", updateStaff);
 adminRouter.delete("/staff/:id", deactivateStaff);
 adminRouter.get("/activity", listActivity);
+adminRouter.get("/edits", listEditActivity);
 adminRouter.get("/webhooks", listWebhookEvents);
 adminRouter.get("/webhooks/:id", getWebhookEvent);
 adminRouter.post("/webhooks/:id/replay", replayWebhookEventHandler);

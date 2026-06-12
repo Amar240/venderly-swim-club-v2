@@ -5,7 +5,6 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../middleware/errorHandler";
 
-const WEDGEWOOD_CLUB_ID = "9dd5014c-8c15-4959-869c-2f61dc80c8af";
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
 const LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
 
@@ -61,10 +60,12 @@ authRouter.post("/login", async (req, res, next) => {
       throw new HttpError(429, "TOO_MANY_ATTEMPTS", "Too many failed PIN attempts. Please try again later.");
     }
 
+    // PIN login scans active staff of all active clubs (multi-club ready);
+    // the issued JWT carries the matched staff member's own clubId.
     const activeStaff = await prisma.staff.findMany({
       where: {
-        clubId: WEDGEWOOD_CLUB_ID,
-        isActive: true
+        isActive: true,
+        club: { isActive: true }
       },
       orderBy: { createdAt: "asc" },
       select: {

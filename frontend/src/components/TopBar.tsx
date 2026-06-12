@@ -33,6 +33,7 @@ export const TopBar = () => {
           <nav className="flex h-14 items-center gap-1">
             <TopNavLink to="/dashboard">Dashboard</TopNavLink>
             <TopNavLink to="/members">Members</TopNavLink>
+            {isAdmin && <TopNavLink to="/reports">Reports</TopNavLink>}
             {isAdmin && <TopNavLink to="/admin">Admin</TopNavLink>}
           </nav>
         </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanPhone, updateEmergencySchema, updatePersonSchema } from "../../src/handlers/memberEdit";
+import { cleanPhone, computeFieldChanges, updateEmergencySchema, updatePersonSchema } from "../../src/handlers/memberEdit";
 
 describe("cleanPhone", () => {
   it("normalizes phone numbers to 10 digits", () => {
@@ -16,6 +16,28 @@ describe("cleanPhone", () => {
 
   it("returns null when no digits are present", () => {
     expect(cleanPhone("abc")).toBeNull();
+  });
+});
+
+describe("computeFieldChanges", () => {
+  it("returns changed fields with normalized string values", () => {
+    expect(computeFieldChanges({ age: 40 }, { age: 41 })).toEqual({
+      age: { from: "40", to: "41" }
+    });
+  });
+
+  it("omits unchanged values", () => {
+    expect(computeFieldChanges({ firstName: "Kelly" }, { firstName: "Kelly" })).toEqual({});
+  });
+
+  it("normalizes empty strings and nulls", () => {
+    expect(computeFieldChanges({ email: "kelly@example.com", phone: null }, { email: "", phone: " " })).toEqual({
+      email: { from: "kelly@example.com", to: null }
+    });
+  });
+
+  it("ignores undefined update values", () => {
+    expect(computeFieldChanges({ email: "kelly@example.com" }, { email: undefined })).toEqual({});
   });
 });
 

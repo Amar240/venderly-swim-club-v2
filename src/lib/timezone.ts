@@ -30,6 +30,27 @@ export const getTimeZoneParts = (
   };
 };
 
+export const getNewYorkDateTimeParts = (
+  date: Date
+): { dateKey: string; hour: number; weekday: number; year: number; month: number; day: number } => {
+  const parts = getTimeZoneParts(date, NEW_YORK_TIME_ZONE);
+  const dateKey = [
+    String(parts.year).padStart(4, "0"),
+    String(parts.month).padStart(2, "0"),
+    String(parts.day).padStart(2, "0")
+  ].join("-");
+  const weekday = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
+
+  return {
+    dateKey,
+    hour: parts.hour,
+    weekday,
+    year: parts.year,
+    month: parts.month,
+    day: parts.day
+  };
+};
+
 export const getTimeZoneOffsetMs = (date: Date, timeZone: string): number => {
   const parts = getTimeZoneParts(date, timeZone);
   const asUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);

@@ -1,9 +1,11 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { LazyMotion, domAnimation } from "framer-motion";
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { Toaster } from "sonner";
 import { TopBar } from "./components/TopBar";
+import { Card, CardContent } from "./components/ui/card";
+import { Skeleton } from "./components/ui/skeleton";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { UiPrefsProvider } from "./hooks/useUiPrefs";
 import { queryClient } from "./lib/queryClient";
@@ -13,7 +15,8 @@ import { AdminWebhooks } from "./pages/AdminWebhooks";
 import { Dashboard } from "./pages/Dashboard";
 import { Login } from "./pages/Login";
 import { Members } from "./pages/Members";
-import { Reports } from "./pages/Reports";
+
+const Reports = lazy(() => import("./pages/Reports").then((module) => ({ default: module.Reports })));
 
 const ProtectedRoute = ({ children, adminOnly = false }: { children: ReactNode; adminOnly?: boolean }) => {
   const { isAuthenticated, staff } = useAuth();
@@ -41,6 +44,29 @@ const StaffLayout = () => (
   </div>
 );
 
+const ReportsFallback = () => (
+  <main className="mx-auto max-w-6xl p-4 md:p-6">
+    <Card className="border-brand-border bg-white shadow-sm">
+      <CardContent className="space-y-6 p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-40" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <Skeleton className="h-11 w-48" />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-28 w-full" />
+        </div>
+        <Skeleton className="h-80 w-full" />
+      </CardContent>
+    </Card>
+  </main>
+);
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -60,6 +86,16 @@ function App() {
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/members" element={<Members />} />
                   <Route path="/members/:id" element={<Members />} />
+                  <Route
+                    path="/reports"
+                    element={
+                      <ProtectedRoute adminOnly>
+                        <Suspense fallback={<ReportsFallback />}>
+                          <Reports />
+                        </Suspense>
+                      </ProtectedRoute>
+                    }
+                  />
                   <Route path="/admin" element={<Navigate to="/admin/staff" replace />} />
                   <Route
                     path="/admin/staff"
@@ -86,14 +122,6 @@ function App() {
                     }
                   />
                 </Route>
-                <Route
-                  path="/reports"
-                  element={
-                    <ProtectedRoute adminOnly>
-                      <Reports />
-                    </ProtectedRoute>
-                  }
-                />
                 <Route path="*" element={<RootRedirect />} />
               </Routes>
             </BrowserRouter>

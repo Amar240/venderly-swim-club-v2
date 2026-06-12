@@ -26,6 +26,6 @@ const assertTestDatabase = async (): Promise<void> => {
 export const resetDb = async (): Promise<void> => {
   await assertTestDatabase();
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "checkin_events", "guest_pass_purchases", "webhook_events", "persons", "memberships", "staff", "clubs" RESTART IDENTITY CASCADE'
+    'TRUNCATE TABLE "checkin_events", "guest_pass_purchases", "webhook_events", "member_edit_logs", "persons", "memberships", "staff", "clubs" RESTART IDENTITY CASCADE'
   );
 };

@@ -1,3 +1,7 @@
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import { randomUUID } from "crypto";
+import type { StaffRole } from "@prisma/client";
 import { prisma } from "../../src/lib/prisma";
 
 export const TEST_GHL_LOCATION_ID = "test-location-1";
@@ -25,6 +29,15 @@ type SeedMembershipInput = {
   guestPassesUsed?: number;
   ghlContactId?: string;
   persons: SeedPersonInput[];
+};
+
+type SeedStaffInput = {
+  clubId: string;
+  name?: string;
+  email?: string;
+  pin?: string;
+  role?: StaffRole;
+  isActive?: boolean;
 };
 
 export const seedClub = async (input: SeedClubInput = {}) =>
@@ -77,13 +90,53 @@ export const seedMembership = async (input: SeedMembershipInput) => {
   return { membership, persons };
 };
 
+export const seedStaff = async (input: SeedStaffInput) => {
+  const passwordHash = await bcrypt.hash(input.pin ?? "1234", 4);
+
+  return prisma.staff.create({
+    data: {
+      clubId: input.clubId,
+      name: input.name ?? "Test Staff",
+      email: input.email ?? `staff-${randomUUID()}@example.com`,
+      passwordHash,
+      role: input.role ?? "STAFF",
+      isActive: input.isActive ?? true
+    }
+  });
+};
+
+export const loginToken = (staff: {
+  id: string;
+  clubId: string;
+  email: string;
+  role: StaffRole;
+}): string => {
+  const secret = process.env.JWT_SECRET;
+
+  if (!secret) {
+    throw new Error("JWT_SECRET must be set for integration tests");
+  }
+
+  return jwt.sign(
+    {
+      sub: staff.id,
+      clubId: staff.clubId,
+      email: staff.email,
+      role: staff.role
+    },
+    secret,
+    { expiresIn: "1h" }
+  );
+};
+
 export const countRows = async () => {
-  const [memberships, persons, checkinEvents, webhookEvents] = await Promise.all([
+  const [memberships, persons, checkinEvents, webhookEvents, memberEditLogs] = await Promise.all([
     prisma.membership.count(),
     prisma.person.count(),
     prisma.checkinEvent.count(),
-    prisma.webhookEvent.count()
+    prisma.webhookEvent.count(),
+    prisma.memberEditLog.count()
   ]);
 
-  return { memberships, persons, checkinEvents, webhookEvents };
+  return { memberships, persons, checkinEvents, webhookEvents, memberEditLogs };
 };

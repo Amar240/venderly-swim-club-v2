@@ -39,6 +39,21 @@ const activityQuerySchema = z.object({
     })
 });
 
+const editActivityQuerySchema = z.object({
+  staffId: z.string().trim().min(1).optional(),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD")
+    .optional(),
+  limit: z
+    .string()
+    .optional()
+    .transform((value) => {
+      const parsed = Number.parseInt(value ?? "50", 10);
+      return Number.isNaN(parsed) ? 50 : Math.min(Math.max(parsed, 1), 200);
+    })
+});
+
 type StaffRecord = {
   id: string;
   name: string;
@@ -68,6 +83,24 @@ export type AdminActivityEvent = {
   staffId: string;
   staffName: string;
   memberName: string;
+};
+
+type MemberEditLogRecord = {
+  id: string;
+  createdAt: Date;
+  targetType: string;
+  targetLabel: string;
+  changes: Prisma.JsonValue;
+  staff: { id: string; name: string };
+};
+
+export type AdminEditActivityEvent = {
+  id: string;
+  createdAt: string;
+  staff: { id: string; name: string };
+  targetType: string;
+  targetLabel: string;
+  changes: Prisma.JsonValue;
 };
 
 const fullName = (person: { firstName: string; lastName: string }): string =>
@@ -134,6 +167,16 @@ export const flattenActivityEvents = (events: ActivityCheckin[]): AdminActivityE
       ];
     })
     .sort((first, second) => Date.parse(second.timestamp) - Date.parse(first.timestamp));
+
+export const serializeEditActivityEvents = (events: MemberEditLogRecord[]): AdminEditActivityEvent[] =>
+  events.map((event) => ({
+    id: event.id,
+    createdAt: event.createdAt.toISOString(),
+    staff: event.staff,
+    targetType: event.targetType,
+    targetLabel: event.targetLabel,
+    changes: event.changes
+  }));
 
 const assertNoActivePinConflict = async (clubId: string, pin: string, excludeStaffId?: string): Promise<void> => {
   const activeStaff = await prisma.staff.findMany({
@@ -375,6 +418,44 @@ export const listActivity: RequestHandler = async (req, res, next) => {
     });
 
     res.json({ events: flattenActivityEvents(events).slice(0, limit) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listEditActivity: RequestHandler = async (req, res, next) => {
+  try {
+    const staffResponse = res as StaffResponse;
+    const clubId = staffResponse.locals.staff.clubId;
+    const { staffId, date, limit } = editActivityQuerySchema.parse(req.query);
+    const dayBounds = date ? getDayBounds(date) : getNewYorkTodayBounds();
+    const events = await prisma.memberEditLog.findMany({
+      where: {
+        clubId,
+        ...(staffId ? { staffId } : {}),
+        createdAt: {
+          gte: dayBounds.start,
+          lt: dayBounds.end
+        }
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        createdAt: true,
+        targetType: true,
+        targetLabel: true,
+        changes: true,
+        staff: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    res.json({ events: serializeEditActivityEvents(events) });
   } catch (error) {
     next(error);
   }

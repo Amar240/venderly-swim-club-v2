@@ -8,6 +8,7 @@ import { updateMembershipAddress, updateMembershipEmergency, updatePerson } from
 import { adminRouter } from "./admin";
 import { authRouter } from "./auth";
 import { dashboardRouter } from "./dashboard";
+import { reportsRouter } from "./reports";
 
 const listMembersQuerySchema = z.object({
   q: z.string().trim().optional(),
@@ -80,6 +81,7 @@ apiV1Router.get("/health", (_req, res) => {
 apiV1Router.use("/auth", authRouter);
 apiV1Router.use("/dashboard", dashboardRouter);
 apiV1Router.use("/admin", adminRouter);
+apiV1Router.use("/reports", reportsRouter);
 apiV1Router.use("/members", membersRouter);
 apiV1Router.use("/memberships", membershipsRouter);
 
@@ -93,6 +95,10 @@ membershipsRouter.get("/", async (req, res, next) => {
     const { q, tier, limit } = listMembershipsQuerySchema.parse(req.query);
     const selectedTier = normalizeTier(tier);
     const tierFilter = tierWhere(selectedTier);
+    // Match the dashboard's definition of "in pool": active AND checked in today (NY).
+    // Stale active events (forgotten sign-outs before the nightly auto sign-out runs)
+    // must not show as currently present.
+    const todayBounds = getNewYorkTodayBounds();
 
     const memberships = await prisma.membership.findMany({
       where: {
@@ -129,7 +135,10 @@ membershipsRouter.get("/", async (req, res, next) => {
             lastName: true,
             isPrimary: true,
             checkinEvents: {
-              where: { isActive: true },
+              where: {
+                isActive: true,
+                checkedInAt: { gte: todayBounds.start, lt: todayBounds.end }
+              },
               select: { id: true },
               take: 1
             }
@@ -141,7 +150,7 @@ membershipsRouter.get("/", async (req, res, next) => {
     res.json({
       memberships: memberships.map((membership) => {
         const primary = membership.persons.find((person) => person.isPrimary) ?? membership.persons[0];
-        const anyInPool = membership.persons.some((person) => person.checkinEvents.length > 0);
+        const membersInPool = membership.persons.filter((person) => person.checkinEvents.length > 0).length;
 
         return {
           membershipId: membership.id,
@@ -155,7 +164,8 @@ membershipsRouter.get("/", async (req, res, next) => {
           guestPassesTotal: membership.guestPassesTotal,
           guestPassesUsed: membership.guestPassesUsed,
           familyCount: membership.persons.length,
-          isAnyMemberCurrentlyIn: anyInPool
+          isAnyMemberCurrentlyIn: membersInPool > 0,
+          membersInPool
         };
       })
     });

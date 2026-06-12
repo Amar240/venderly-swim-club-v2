@@ -61,6 +61,7 @@ model Staff {
   updatedAt      DateTime       @updatedAt @map("updated_at")
   club           Club           @relation(fields: [clubId], references: [id], onDelete: Cascade)
   checkinEvents  CheckinEvent[]
+  memberEditLogs MemberEditLog[]
 
   @@index([clubId])
   @@map("staff")
@@ -210,4 +211,20 @@ model WebhookEvent {
   @@index([status, receivedAt])
   @@index([endpoint, receivedAt])
   @@map("webhook_events")
+}
+
+model MemberEditLog {
+  id           String   @id @default(uuid())
+  clubId       String   @map("club_id")
+  staffId      String   @map("staff_id")
+  targetType   String   @map("target_type")
+  personId     String?  @map("person_id")
+  membershipId String?  @map("membership_id")
+  targetLabel  String   @map("target_label")
+  changes      Json
+  createdAt    DateTime @default(now()) @map("created_at")
+  staff        Staff    @relation(fields: [staffId], references: [id])
+
+  @@index([clubId, createdAt])
+  @@map("member_edit_logs")
 }

@@ -130,6 +130,7 @@ export interface MembershipListItem {
   guestPassesUsed: number;
   familyCount: number;
   isAnyMemberCurrentlyIn: boolean;
+  membersInPool: number;
 }
 
 export interface MembershipsResponse {
@@ -243,6 +244,86 @@ export interface ActivityEvent {
   memberName: string;
 }
 
+export interface EditActivityEvent {
+  id: string;
+  createdAt: string;
+  staff: {
+    id: string;
+    name: string;
+  };
+  targetType: string;
+  targetLabel: string;
+  changes: Record<string, { from: string | null; to: string | null }>;
+}
+
+export type ReportRange = "today" | "week" | "month" | "season";
+
+export interface ReportsSummary {
+  range: ReportRange;
+  startDate: string;
+  endDate: string;
+  generatedAt: string;
+  kpis: {
+    totalVisits: { value: number; delta: number | null };
+    uniqueMembers: { value: number; delta: number | null };
+    avgPerOpenDay: { value: number; delta: number | null };
+    openDays: number;
+    busiestDay: { date: string; count: number } | null;
+  };
+  dailyVisits: Array<{
+    date: string;
+    members: number;
+    guests: number;
+    weekday: number;
+    peakMembers: number;
+    peakPct: number;
+  }>;
+  peakHeatmap: Array<{ weekday: number; hour: number; count: number }>;
+  engagement: {
+    buckets: { never: number; casual: number; regular: number };
+    neverVisited: Array<{
+      membershipId: string;
+      primaryPersonId: string | null;
+      householdName: string;
+      email: string | null;
+      phone: string | null;
+      tier: string;
+      memberSince: string | null;
+    }>;
+  };
+  guestPasses: {
+    revenueCents: number;
+    packsSold: number;
+    passesSold: number;
+    guestsAdmitted: number;
+    topBuyers: Array<{ householdName: string; packs: number; passes: number }>;
+    buyers: Array<{
+      householdName: string;
+      email: string | null;
+      packs: number;
+      passes: number;
+      guestsAdmitted: number;
+    }>;
+  };
+  capacity: {
+    maxCapacity: number;
+    avgDailyPeakPct: number;
+    daysOver80Pct: number;
+    note: "peak concurrency";
+  };
+  staffActivity: Array<{
+    staffId: string;
+    name: string;
+    manualCheckins: number;
+    manualSignouts: number;
+    edits: number;
+  }>;
+  insights: Array<{
+    type: "peak" | "engagement" | "revenue" | "unused" | "capacity";
+    text: string;
+  }>;
+}
+
 export type WebhookEventStatus = "RECEIVED" | "PROCESSED" | "FAILED";
 export type WebhookEndpoint = "signup" | "checkin" | "signout" | "guestpass";
 
@@ -309,6 +390,20 @@ export const fetchActivity = async (params: {
   limit?: number;
 }): Promise<{ events: ActivityEvent[] }> => {
   const response = await api.get<{ events: ActivityEvent[] }>("/admin/activity", { params });
+  return response.data;
+};
+
+export const fetchEditActivity = async (params: {
+  staffId?: string;
+  date?: string;
+  limit?: number;
+}): Promise<{ events: EditActivityEvent[] }> => {
+  const response = await api.get<{ events: EditActivityEvent[] }>("/admin/edits", { params });
+  return response.data;
+};
+
+export const getReportsSummary = async (range: ReportRange): Promise<ReportsSummary> => {
+  const response = await api.get<ReportsSummary>("/reports/summary", { params: { range } });
   return response.data;
 };
 

@@ -1,7 +1,6 @@
-import { Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Search, Ticket } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { GuestPassBar } from "../components/GuestPassBar";
 import { MemberDetailSheet } from "../components/MemberDetailSheet";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { Badge } from "../components/ui/badge";
@@ -12,27 +11,14 @@ import { useMemberships } from "../hooks/useMembers";
 import type { MembershipListItem } from "../lib/api";
 import { cn } from "../lib/utils";
 
-const FILTERS = ["All", "Family", "Adult", "Student"];
+const IN_POOL_FILTER = "In pool";
+const FILTERS = ["All", IN_POOL_FILTER, "Family", "Adult", "Student"];
 
 const initials = (firstName: string, lastName: string): string => `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
 
-const tierColor = (tier: string): string => {
-  const normalized = tier.toLowerCase();
-
-  if (normalized.includes("family")) {
-    return "bg-blue-100 text-brand-primary";
-  }
-
-  if (normalized.includes("adult")) {
-    return "bg-emerald-100 text-brand-success";
-  }
-
-  if (normalized.includes("student")) {
-    return "bg-amber-100 text-amber-700";
-  }
-
-  return "bg-slate-100 text-brand-navy";
-};
+// One neutral chip style for all tiers — per-tier colors implied meaning that doesn't exist.
+const TIER_CHIP_CLASS = "bg-slate-100 text-slate-600";
+const AVATAR_CLASS = "bg-brand-primary/10 text-brand-primary";
 
 export const Members = () => {
   const [search, setSearch] = useState("");
@@ -40,13 +26,27 @@ export const Members = () => {
   const [tier, setTier] = useState("All");
   const params = useParams();
   const navigate = useNavigate();
-  const membershipsQuery = useMemberships({ q: debouncedSearch, tier });
+  // "In pool" is a client-side status filter; the API only understands tier filters.
+  const membershipsQuery = useMemberships({ q: debouncedSearch, tier: tier === IN_POOL_FILTER ? "All" : tier });
   const selectedPersonId = params.id ?? null;
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
     return () => window.clearTimeout(timer);
   }, [search]);
+
+  const inPoolCount = useMemo(
+    () => membershipsQuery.data?.memberships.filter((membership) => membership.membersInPool > 0).length ?? 0,
+    [membershipsQuery.data]
+  );
+
+  const visibleMemberships = useMemo(() => {
+    const all = membershipsQuery.data?.memberships ?? [];
+    const filtered = tier === IN_POOL_FILTER ? all.filter((membership) => membership.membersInPool > 0) : all;
+
+    // In-pool households first (most in pool on top), then the existing order.
+    return [...filtered].sort((first, second) => second.membersInPool - first.membersInPool);
+  }, [membershipsQuery.data, tier]);
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
@@ -79,7 +79,7 @@ export const Members = () => {
                   : "border-brand-border bg-brand-surface text-slate-600"
               )}
             >
-              {filter}
+              {filter === IN_POOL_FILTER && inPoolCount > 0 ? `${IN_POOL_FILTER} (${inPoolCount})` : filter}
             </button>
           ))}
         </div>
@@ -88,12 +88,12 @@ export const Members = () => {
       {membershipsQuery.isLoading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[0, 1, 2, 3, 4, 5].map((item) => (
-            <Skeleton key={item} className="h-52 w-full" />
+            <Skeleton key={item} className="h-32 w-full" />
           ))}
         </div>
-      ) : membershipsQuery.data?.memberships.length ? (
+      ) : visibleMemberships.length ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {membershipsQuery.data.memberships.map((membership) => (
+          {visibleMemberships.map((membership) => (
             <MembershipCard
               key={membership.membershipId}
               membership={membership}
@@ -126,37 +126,50 @@ export const Members = () => {
 
 const MembershipCard = ({ membership, onOpen }: { membership: MembershipListItem; onOpen: () => void }) => {
   const canOpen = Boolean(membership.accountHolderPersonId);
+  const inPool = membership.membersInPool > 0;
+  const passesRemaining = Math.max(0, membership.guestPassesTotal - membership.guestPassesUsed);
 
   return (
     <Card
       className={cn(
         "border-brand-border bg-brand-surface shadow-sm transition-transform duration-150",
         canOpen && "cursor-pointer hover:-translate-y-0.5 hover:shadow-md",
-        !canOpen && "opacity-70"
+        !canOpen && "opacity-70",
+        inPool && "border-l-[3px] border-l-brand-primary"
       )}
       onClick={onOpen}
     >
-      <CardContent className="space-y-4 p-4">
-        <div className="flex items-start gap-3">
-          <Avatar className="h-12 w-12">
-            <AvatarFallback className={tierColor(membership.tier)}>
+      <CardContent className="space-y-2 p-4">
+        <div className="flex items-center gap-3">
+          <Avatar className="h-11 w-11 shrink-0">
+            <AvatarFallback className={AVATAR_CLASS}>
               {initials(membership.accountHolderFirstName, membership.accountHolderLastName)}
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
             <p className="truncate text-lg font-bold text-brand-navy">{membership.accountHolderName}</p>
           </div>
-          <Badge className={tierColor(membership.tier)}>{membership.tier}</Badge>
+          <Badge className={TIER_CHIP_CLASS}>{membership.tier}</Badge>
         </div>
 
-        <GuestPassBar total={membership.guestPassesTotal} used={membership.guestPassesUsed} />
+        {inPool ? (
+          <div className="flex items-center gap-2 text-sm font-semibold text-brand-navy">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-brand-success" aria-hidden />
+            {membership.membersInPool} of {membership.familyCount} in pool
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">
+            {membership.familyCount} members ·{" "}
+            <span className={cn("font-semibold", membership.status === "ACTIVE" ? "text-brand-success" : "text-brand-danger")}>
+              {membership.status === "ACTIVE" ? "Active" : "Expired"}
+            </span>
+          </p>
+        )}
 
-        <div className="flex items-center justify-between text-sm">
-          <span className="font-medium text-slate-600">{membership.familyCount} members</span>
-          <span className={cn("font-semibold", membership.status === "ACTIVE" ? "text-brand-success" : "text-brand-danger")}>
-            {membership.isAnyMemberCurrentlyIn ? "In pool" : membership.status === "ACTIVE" ? "Active" : "Expired"}
-          </span>
-        </div>
+        <p className="flex items-center gap-1.5 text-xs text-slate-500">
+          <Ticket className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          {membership.guestPassesTotal === 0 ? "No guest passes" : `${passesRemaining} guest passes left`}
+        </p>
       </CardContent>
     </Card>
   );
