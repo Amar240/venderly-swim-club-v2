@@ -197,7 +197,7 @@ describe("member edit audit logging (integration)", () => {
     });
   });
 
-  describe("soft delete and restore person", () => {
+  describe("hard delete person", () => {
     const seedHousehold = async () =>
       seedMembership({
         clubId,
@@ -245,8 +245,32 @@ describe("member edit audit logging (integration)", () => {
       expect(response.body.error.code).toBe("PERSON_CHECKED_IN");
     });
 
-    it("soft deletes a non-primary person, hides them, and logs person_remove", async () => {
-      const { persons } = await seedHousehold();
+    it("hard deletes a non-primary person, preserves visit history, and removes related edit logs", async () => {
+      const { membership, persons } = await seedHousehold();
+      const staff = await prisma.staff.findFirstOrThrow({ where: { clubId, email: "staff@example.com" } });
+      const checkin = await prisma.checkinEvent.create({
+        data: {
+          clubId,
+          personId: persons[1]!.id,
+          membershipId: membership.id,
+          eventType: "check_in",
+          isActive: false,
+          checkedInAt: new Date("2026-06-01T14:00:00Z"),
+          signedOutAt: new Date("2026-06-01T15:00:00Z"),
+          source: "test_seed"
+        }
+      });
+      await prisma.memberEditLog.create({
+        data: {
+          clubId,
+          staffId: staff.id,
+          targetType: "person",
+          personId: persons[1]!.id,
+          membershipId: membership.id,
+          targetLabel: "Tom Oldis",
+          changes: { age: { from: null, to: "10" } }
+        }
+      });
       const app = await getTestApp();
 
       const response = await request(app)
@@ -254,51 +278,55 @@ describe("member edit audit logging (integration)", () => {
         .set("Authorization", `Bearer ${staffToken}`);
 
       expect(response.status).toBe(200);
-      expect(response.body).toMatchObject({ status: "INACTIVE" });
+      expect(response.body).toEqual({ personId: persons[1]!.id });
 
-      const deleted = await prisma.person.findUniqueOrThrow({ where: { id: persons[1]!.id } });
-      expect(deleted.status).toBe("INACTIVE");
+      expect(await prisma.person.findUnique({ where: { id: persons[1]!.id } })).toBeNull();
+      expect(await prisma.checkinEvent.findUnique({ where: { id: checkin.id } })).toMatchObject({
+        id: checkin.id,
+        personId: null,
+        membershipId: membership.id
+      });
+      expect(await prisma.memberEditLog.count({ where: { personId: persons[1]!.id } })).toBe(0);
+      await expect(prisma.membership.findUniqueOrThrow({ where: { id: membership.id } })).resolves.toMatchObject({
+        maxMembers: 3
+      });
+      const removalLog = await prisma.memberEditLog.findFirstOrThrow({
+        where: { targetType: "person_remove", membershipId: membership.id }
+      });
+      expect(removalLog).toMatchObject({
+        clubId,
+        staffId: staff.id,
+        personId: null,
+        membershipId: membership.id,
+        targetLabel: "Tom Oldis"
+      });
+      expect(removalLog.changes).toEqual({ deleted: { from: "Tom Oldis", to: null } });
 
-      const log = await prisma.memberEditLog.findFirstOrThrow({ where: { targetType: "person_remove" } });
-      expect(log.changes).toMatchObject({ status: { from: "ACTIVE", to: "INACTIVE" } });
-
-      // Hidden from the member detail family list, present in hiddenMembers
       const detail = await authGet(`/api/v1/members/${persons[0]!.id}`, staffToken);
       expect(detail.body.member.family).toHaveLength(1);
-      expect(detail.body.member.hiddenMembers).toEqual([
-        expect.objectContaining({ personId: persons[1]!.id, name: "Tom Oldis" })
-      ]);
+      expect(detail.body.member.hiddenMembers).toBeUndefined();
 
-      // Hidden from member search
+      // Deleted from member search
       const search = await authGet("/api/v1/members?q=Tom", staffToken);
       expect(search.body.members).toHaveLength(0);
     });
 
-    it("restores a hidden person and logs person_restore", async () => {
-      const { persons } = await seedHousehold();
+    it("does not decrement membership max members below 1", async () => {
+      const { membership, persons } = await seedHousehold();
+      await prisma.membership.update({
+        where: { id: membership.id },
+        data: { maxMembers: 1 }
+      });
       const app = await getTestApp();
 
-      await request(app).delete(`/api/v1/members/persons/${persons[1]!.id}`).set("Authorization", `Bearer ${staffToken}`);
-
-      const restore = await request(app)
-        .patch(`/api/v1/members/persons/${persons[1]!.id}/restore`)
+      const response = await request(app)
+        .delete(`/api/v1/members/persons/${persons[1]!.id}`)
         .set("Authorization", `Bearer ${staffToken}`);
 
-      expect(restore.status).toBe(200);
-      expect(restore.body).toMatchObject({ status: "ACTIVE" });
-
-      const restored = await prisma.person.findUniqueOrThrow({ where: { id: persons[1]!.id } });
-      expect(restored.status).toBe("ACTIVE");
-
-      const log = await prisma.memberEditLog.findFirstOrThrow({ where: { targetType: "person_restore" } });
-      expect(log.targetLabel).toBe("Tom Oldis");
-
-      // Restoring an already-active person is rejected
-      const again = await request(app)
-        .patch(`/api/v1/members/persons/${persons[1]!.id}/restore`)
-        .set("Authorization", `Bearer ${staffToken}`);
-      expect(again.status).toBe(409);
-      expect(again.body.error.code).toBe("PERSON_NOT_INACTIVE");
+      expect(response.status).toBe(200);
+      await expect(prisma.membership.findUniqueOrThrow({ where: { id: membership.id } })).resolves.toMatchObject({
+        maxMembers: 1
+      });
     });
   });
 });

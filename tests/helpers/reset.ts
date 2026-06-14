@@ -22,7 +22,11 @@ const assertTestDatabase = async (): Promise<void> => {
   verifiedTestDatabase = true;
 };
 
-/** Truncates all application tables. Refuses to run outside swimclub_test. */
+/**
+ * Truncates all application tables. Refuses to run outside swimclub_test.
+ * If tests move to persistent global clubs/staff, keep login staff cleanup
+ * test-local so stale PINs cannot leak between suites.
+ */
 export const resetDb = async (): Promise<void> => {
   await assertTestDatabase();
   await prisma.$executeRawUnsafe(

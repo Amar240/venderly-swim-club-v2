@@ -22,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
 import { getReportsSummary, type ReportRange, type ReportsSummary } from "../lib/api";
+import { cn } from "../lib/utils";
 
 const RANGES: Array<{ value: ReportRange; label: string }> = [
   { value: "today", label: "Today" },
@@ -94,6 +95,12 @@ const INSIGHT_ICONS = {
   unused: Ticket,
   capacity: Gauge
 } as const;
+
+const REPORT_CARD_CLASS =
+  "h-full rounded-2xl border border-brand-border/80 bg-white shadow-sm transition-shadow hover:shadow-md";
+const REPORT_CARD_HEADER_CLASS = "space-y-1 p-5 pb-3 md:p-6 md:pb-4";
+const REPORT_CARD_CONTENT_CLASS = "p-5 pt-0 md:p-6 md:pt-0";
+const REPORT_SUBTITLE_CLASS = "text-sm leading-5 text-slate-500";
 
 const escapeCsv = (value: string | number): string => {
   const raw = String(value);
@@ -245,8 +252,8 @@ export const Reports = () => {
   if (query.isError || !summary) {
     return (
       <main className="mx-auto max-w-6xl p-4 md:p-6">
-        <Card className="border-brand-border bg-white shadow-sm">
-          <CardContent className="flex flex-col items-center gap-4 py-16 text-center">
+        <Card className={REPORT_CARD_CLASS}>
+          <CardContent className={cn(REPORT_CARD_CONTENT_CLASS, "flex flex-col items-center gap-4 py-16 text-center")}>
             <h1 className="text-2xl font-bold text-brand-navy">Reports could not load</h1>
             <p className="max-w-md text-sm text-slate-500">Try again in a moment. If this keeps happening, check the backend logs.</p>
             <Button onClick={() => query.refetch()} className="bg-brand-primary text-white hover:bg-brand-primary/90">
@@ -285,8 +292,8 @@ export const Reports = () => {
       </header>
 
       {summary.insights.length > 0 && (
-        <Card className="border-brand-border bg-white shadow-sm">
-          <CardContent className="divide-y divide-brand-border p-2">
+        <Card className={REPORT_CARD_CLASS}>
+          <CardContent className="divide-y divide-brand-border/80 p-3">
             {summary.insights.map((insight) => {
               const Icon = INSIGHT_ICONS[insight.type];
               const isEngagement = insight.type === "engagement";
@@ -324,7 +331,7 @@ export const Reports = () => {
         </Card>
       )}
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Total visits"
           value={formatNumber(summary.kpis.totalVisits.value)}
@@ -352,11 +359,11 @@ export const Reports = () => {
         />
       </section>
 
-      <Card className="border-brand-border bg-white shadow-sm">
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <Card className={REPORT_CARD_CLASS}>
+        <CardHeader className={cn(REPORT_CARD_HEADER_CLASS, "flex flex-col gap-3 space-y-0 sm:flex-row sm:items-center sm:justify-between")}>
           <div>
             <CardTitle className="text-brand-navy">Attendance</CardTitle>
-            <p className="mt-1 text-sm text-slate-500">Daily member and guest visits.</p>
+            <p className={REPORT_SUBTITLE_CLASS}>Daily member and guest visits.</p>
           </div>
           <div className="flex items-center gap-3">
             <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
@@ -379,7 +386,7 @@ export const Reports = () => {
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className={REPORT_CARD_CONTENT_CLASS}>
           {chartData.some((day) => day.total > 0) ? (
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -400,12 +407,12 @@ export const Reports = () => {
         </CardContent>
       </Card>
 
-      <Card className="border-brand-border bg-white shadow-sm">
-        <CardHeader>
+      <Card className={REPORT_CARD_CLASS}>
+        <CardHeader className={REPORT_CARD_HEADER_CLASS}>
           <CardTitle className="text-brand-navy">Peak Hours</CardTitle>
-          <p className="mt-1 text-sm text-slate-500">Check-ins by New York weekday and hour.</p>
+          <p className={REPORT_SUBTITLE_CLASS}>Check-ins by New York weekday and hour.</p>
         </CardHeader>
-        <CardContent>
+        <CardContent className={REPORT_CARD_CONTENT_CLASS}>
           <div className="overflow-x-auto">
             <div className="min-w-[760px]">
               <div className="grid grid-cols-[56px_repeat(14,minmax(42px,1fr))] gap-1 text-xs text-slate-500">
@@ -424,31 +431,33 @@ export const Reports = () => {
         </CardContent>
       </Card>
 
-      <section className="grid gap-6 lg:grid-cols-2 lg:items-start">
-        <Card ref={engagementCardRef} className="scroll-mt-20 border-brand-border bg-white shadow-sm">
-          <CardHeader>
+      <section className="grid items-stretch gap-6 lg:grid-cols-2">
+        <Card ref={engagementCardRef} className={cn(REPORT_CARD_CLASS, "scroll-mt-20")}>
+          <CardHeader className={REPORT_CARD_HEADER_CLASS}>
             <CardTitle className="text-brand-navy">Engagement</CardTitle>
-            <p className="mt-1 text-sm text-slate-500">Household visits this season.</p>
+            <p className={REPORT_SUBTITLE_CLASS}>Household visits this season.</p>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className={cn(REPORT_CARD_CONTENT_CLASS, "space-y-5")}>
             {engagementData.some((item) => item.value > 0) ? (
-              <div className="h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={engagementData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={88}>
-                      {engagementData.map((item, index) => (
-                        <Cell key={item.name} fill={ENGAGEMENT_COLORS[index] ?? "#2196F3"} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
+              <div className="flex h-64 items-center justify-center">
+                <div className="h-56 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={engagementData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={88}>
+                        {engagementData.map((item, index) => (
+                          <Cell key={item.name} fill={ENGAGEMENT_COLORS[index] ?? "#2196F3"} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             ) : (
               <EmptyState>No engagement data yet.</EmptyState>
             )}
-            <div className="rounded-lg border border-brand-border">
+            <div className="rounded-xl border border-brand-border/80 bg-white">
               <button
                 type="button"
                 onClick={() =>
@@ -466,7 +475,7 @@ export const Reports = () => {
                 <span className="text-brand-primary">{showNeverVisited ? "Hide" : "Show"}</span>
               </button>
               {showNeverVisited && (
-                <div className="border-t border-brand-border p-4">
+                <div className="border-t border-brand-border/80 p-4">
                   <div className="mb-3 flex flex-wrap gap-2">
                     <Button type="button" variant="outline" onClick={copyEmails} className="h-11 border-brand-border">
                       <Copy className="h-4 w-4" />
@@ -544,11 +553,11 @@ export const Reports = () => {
           </CardContent>
         </Card>
 
-        <Card className="border-brand-border bg-white shadow-sm">
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Card className={REPORT_CARD_CLASS}>
+          <CardHeader className={cn(REPORT_CARD_HEADER_CLASS, "flex flex-col gap-3 space-y-0 sm:flex-row sm:items-center sm:justify-between")}>
             <div>
               <CardTitle className="text-brand-navy">Guest Passes</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Pack sales and guest admissions.</p>
+              <p className={REPORT_SUBTITLE_CLASS}>Pack sales and guest admissions.</p>
             </div>
             <Button
               type="button"
@@ -561,16 +570,21 @@ export const Reports = () => {
               CSV
             </Button>
           </CardHeader>
-          <CardContent className="space-y-5">
+          <CardContent className={cn(REPORT_CARD_CONTENT_CLASS, "space-y-5")}>
             <div>
-              <div className="text-3xl font-bold text-brand-navy">
+              <div
+                className={cn(
+                  "text-3xl font-bold tabular-nums text-brand-navy",
+                  summary.guestPasses.revenueCents === 0 && "font-semibold text-slate-500"
+                )}
+              >
                 {currencyFormatter.format(summary.guestPasses.revenueCents / 100)}
               </div>
               <p className="text-sm text-slate-500">Guest pass revenue</p>
             </div>
             {summary.guestPasses.packsSold === 0 ? (
-              <div className="rounded-xl border border-dashed border-brand-border p-5 text-sm text-slate-500">
-                <p>No packs sold this {rangeNoun(range)}.</p>
+              <div className="rounded-xl border border-dashed border-brand-border/80 bg-brand-background/40 p-5 text-sm leading-6 text-slate-500">
+                <p className="font-medium">No packs sold this {rangeNoun(range)}.</p>
                 {summary.guestPasses.guestsAdmitted > 0 && (
                   <p className="mt-2">
                     Members brought {summary.guestPasses.guestsAdmitted} guest
@@ -596,16 +610,19 @@ export const Reports = () => {
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Top buyers</h3>
-                <div className="mt-3 space-y-2">
-                  {summary.guestPasses.topBuyers.map((buyer) => (
-                    <div key={buyer.householdName} className="flex items-center justify-between rounded-lg bg-brand-background/60 p-3">
-                      <span className="font-semibold text-brand-navy">{buyer.householdName}</span>
-                      <span className="text-sm text-slate-500">
-                        {buyer.packs} packs · {buyer.passes} passes
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                  <div className="mt-3 space-y-2">
+                    {summary.guestPasses.topBuyers.map((buyer) => (
+                      <div
+                        key={buyer.householdName}
+                        className="flex items-center justify-between rounded-xl bg-brand-background/60 p-3"
+                      >
+                        <span className="font-semibold text-brand-navy">{buyer.householdName}</span>
+                        <span className="text-sm tabular-nums text-slate-500">
+                          {buyer.packs} packs · {buyer.passes} passes
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </>
             )}
@@ -613,15 +630,22 @@ export const Reports = () => {
         </Card>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <Card className="border-brand-border bg-white shadow-sm">
-          <CardHeader>
+      <section className="grid items-stretch gap-6 lg:grid-cols-2">
+        <Card className={REPORT_CARD_CLASS}>
+          <CardHeader className={REPORT_CARD_HEADER_CLASS}>
             <CardTitle className="text-brand-navy">Capacity</CardTitle>
-            <p className="mt-1 text-sm text-slate-500">Average daily peak, members only.</p>
+            <p className={REPORT_SUBTITLE_CLASS}>Average daily peak, members only.</p>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <div className="text-3xl font-bold text-brand-navy">{formatPct(summary.capacity.avgDailyPeakPct)}</div>
+          <CardContent className={cn(REPORT_CARD_CONTENT_CLASS, "flex h-[calc(100%-88px)] flex-col justify-center space-y-5")}>
+            <div className="rounded-xl bg-brand-background/40 p-5 text-center">
+              <div
+                className={cn(
+                  "text-4xl font-bold tabular-nums text-brand-navy",
+                  summary.capacity.avgDailyPeakPct === 0 && "font-semibold text-slate-500"
+                )}
+              >
+                {formatPct(summary.capacity.avgDailyPeakPct)}
+              </div>
               <p className="text-sm text-slate-500">Avg daily peak of {summary.capacity.maxCapacity} swimmer capacity</p>
             </div>
             <div className="h-3 rounded-full bg-brand-background">
@@ -630,38 +654,43 @@ export const Reports = () => {
                 style={{ width: `${Math.min(100, summary.capacity.avgDailyPeakPct)}%` }}
               />
             </div>
-            <div className="rounded-lg bg-brand-background/60 p-3 text-sm font-semibold text-brand-navy">
+            <div
+              className={cn(
+                "rounded-xl bg-brand-background/60 p-3 text-center text-sm font-semibold tabular-nums text-brand-navy",
+                summary.capacity.daysOver80Pct === 0 && "font-medium text-slate-500"
+              )}
+            >
               {summary.capacity.daysOver80Pct} days over 80%
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-brand-border bg-white shadow-sm">
-          <CardHeader>
+        <Card className={REPORT_CARD_CLASS}>
+          <CardHeader className={REPORT_CARD_HEADER_CLASS}>
             <CardTitle className="text-brand-navy">Staff Activity</CardTitle>
-            <p className="mt-1 text-sm text-slate-500">Manual actions and member edits.</p>
+            <p className={REPORT_SUBTITLE_CLASS}>Manual actions and member edits.</p>
           </CardHeader>
-          <CardContent>
+          <CardContent className={REPORT_CARD_CONTENT_CLASS}>
             {summary.staffActivity.length === 0 ? (
               <EmptyState>No staff activity in this range.</EmptyState>
             ) : (
-              <div className="-mx-4 overflow-x-auto px-4">
+              <div className="-mx-2 overflow-x-auto px-2">
                 <table className="w-full min-w-[640px] text-sm">
                   <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
                     <tr>
-                      <th className="py-2">Staff</th>
-                      <th className="py-2">Manual check-ins</th>
-                      <th className="py-2">Sign-outs</th>
-                      <th className="py-2">Edits</th>
+                      <th className="px-2 py-2 font-semibold">Staff</th>
+                      <th className="px-2 py-2 font-semibold">Manual check-ins</th>
+                      <th className="px-2 py-2 font-semibold">Sign-outs</th>
+                      <th className="px-2 py-2 font-semibold">Edits</th>
                     </tr>
                   </thead>
                   <tbody>
                     {summary.staffActivity.map((staff) => (
-                      <tr key={staff.staffId} className="border-t border-brand-border">
-                        <td className="py-3 font-semibold text-brand-navy">{staff.name}</td>
-                        <td className="py-3">{staff.manualCheckins}</td>
-                        <td className="py-3">{staff.manualSignouts}</td>
-                        <td className="py-3">{staff.edits}</td>
+                      <tr key={staff.staffId} className="border-t border-brand-border/80">
+                        <td className="px-2 py-3 font-semibold text-brand-navy">{staff.name}</td>
+                        <td className="px-2 py-3 tabular-nums text-slate-600">{staff.manualCheckins}</td>
+                        <td className="px-2 py-3 tabular-nums text-slate-600">{staff.manualSignouts}</td>
+                        <td className="px-2 py-3 tabular-nums text-slate-600">{staff.edits}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -714,7 +743,7 @@ const KpiCard = ({
   const formattedDelta = formatDelta(delta);
 
   return (
-    <Card className="border-brand-border bg-white shadow-sm">
+    <Card className={REPORT_CARD_CLASS}>
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -723,11 +752,11 @@ const KpiCard = ({
             {sublabel && <p className="mt-1 text-xs text-slate-500">{sublabel}</p>}
           </div>
           {formattedDelta && (
-            <Badge className={delta !== null && delta < 0 ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}>
+            <Badge className={delta !== null && delta < 0 ? "bg-brand-danger text-white" : "bg-brand-success text-white"}>
               {formattedDelta}
             </Badge>
           )}
-          {!formattedDelta && showNewChip && <Badge className="bg-slate-100 text-slate-600">new</Badge>}
+          {!formattedDelta && showNewChip && <Badge className="bg-brand-background text-slate-600">new</Badge>}
         </div>
       </CardContent>
     </Card>
@@ -735,7 +764,9 @@ const KpiCard = ({
 };
 
 const EmptyState = ({ children }: { children: string }) => (
-  <div className="rounded-xl border border-dashed border-brand-border p-8 text-center text-sm text-slate-500">{children}</div>
+  <div className="rounded-xl border border-dashed border-brand-border/80 bg-brand-background/40 p-8 text-center text-sm font-medium text-slate-500">
+    {children}
+  </div>
 );
 
 const HeatmapRow = ({

@@ -1,4 +1,8 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+
+dotenv.config({ path: ".env.local", override: true });
+dotenv.config();
+
 import { createApp } from "./app";
 import { startAutoSignoutJob } from "./lib/autoSignout";
 import { startEmailDigestJob } from "./lib/emailDigest";

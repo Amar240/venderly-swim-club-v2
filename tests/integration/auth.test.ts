@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import { prisma } from "../../src/lib/prisma";
 import { getTestApp } from "../helpers/app";
@@ -14,13 +14,22 @@ const postLogin = async (pin: string, ip: string) => {
 
 describe("POST /api/v1/auth/login (integration)", () => {
   let clubId: string;
+  let createdStaffIds: string[] = [];
 
   beforeEach(async () => {
     await resetDb();
+    createdStaffIds = [];
     const club = await seedClub();
     clubId = club.id;
-    await seedStaff({ clubId, name: "Admin", email: "admin@example.com", pin: "1234", role: "ADMIN" });
-    await seedStaff({ clubId, name: "Front Desk", email: "desk@example.com", pin: "2026", role: "STAFF" });
+    const admin = await seedStaff({ clubId, name: "Admin", email: "admin@example.com", pin: "1234", role: "ADMIN" });
+    const staff = await seedStaff({ clubId, name: "Front Desk", email: "desk@example.com", pin: "2026", role: "STAFF" });
+    createdStaffIds.push(admin.id, staff.id);
+  });
+
+  afterEach(async () => {
+    if (createdStaffIds.length > 0) {
+      await prisma.staff.deleteMany({ where: { id: { in: createdStaffIds } } });
+    }
   });
 
   afterAll(async () => {
@@ -82,7 +91,7 @@ describe("POST /api/v1/auth/login (integration)", () => {
   });
 
   it("rejects an inactive staff member's PIN", async () => {
-    await seedStaff({
+    const formerStaff = await seedStaff({
       clubId,
       name: "Former Staff",
       email: "former@example.com",
@@ -90,6 +99,7 @@ describe("POST /api/v1/auth/login (integration)", () => {
       role: "STAFF",
       isActive: false
     });
+    createdStaffIds.push(formerStaff.id);
 
     const response = await postLogin("9999", "10.1.0.6");
     expect(response.status).toBe(401);

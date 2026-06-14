@@ -39,7 +39,7 @@ type CheckinRow = {
   id?: string;
   checkedInAt: Date;
   signedOutAt: Date | null;
-  personId: string;
+  personId: string | null;
   membershipId: string | null;
   staffId?: string | null;
   numGuests: number;
@@ -274,7 +274,8 @@ const countOpenDaysFromCheckins = (checkins: CheckinRow[]): number => {
 
 export const calculateKpiStats = (checkins: CheckinRow[], openDays: number) => {
   const totalVisits = checkins.reduce((total, checkin) => total + 1 + checkin.numGuests, 0);
-  const uniqueMembers = new Set(checkins.map((checkin) => checkin.personId)).size;
+  const uniqueMembers = new Set(checkins.map((checkin) => checkin.personId).filter((personId) => personId !== null))
+    .size;
 
   return {
     totalVisits,

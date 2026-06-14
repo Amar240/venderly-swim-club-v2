@@ -73,7 +73,7 @@ type ActivityCheckin = {
   checkedInAt: Date;
   signedOutAt: Date | null;
   staff: { id: string; name: string } | null;
-  person: { firstName: string; lastName: string };
+  person: { firstName: string; lastName: string } | null;
 };
 
 export type AdminActivityEvent = {
@@ -140,7 +140,7 @@ export const flattenActivityEvents = (events: ActivityCheckin[]): AdminActivityE
         return [];
       }
 
-      const memberName = fullName(event.person);
+      const memberName = event.person ? fullName(event.person) : "Unknown member";
       const checkinEntry: AdminActivityEvent = {
         eventId: event.id,
         timestamp: event.checkedInAt.toISOString(),

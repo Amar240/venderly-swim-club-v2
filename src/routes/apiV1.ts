@@ -6,8 +6,7 @@ import { HttpError } from "../middleware/errorHandler";
 import { jwtAuth, type StaffResponse } from "../middleware/jwtAuth";
 import {
   addPersonToMembership,
-  restorePerson,
-  softDeletePerson,
+  deletePerson,
   updateMembershipAddress,
   updateMembershipEmergency,
   updatePerson
@@ -262,8 +261,7 @@ membersRouter.get("/", async (req, res, next) => {
 });
 
 membersRouter.patch("/persons/:id", updatePerson);
-membersRouter.delete("/persons/:id", softDeletePerson);
-membersRouter.patch("/persons/:id/restore", restorePerson);
+membersRouter.delete("/persons/:id", deletePerson);
 membersRouter.post("/memberships/:membershipId/persons", addPersonToMembership);
 membersRouter.patch("/memberships/:id/address", updateMembershipAddress);
 membersRouter.patch("/memberships/:id/emergency", updateMembershipEmergency);
@@ -439,13 +437,6 @@ membersRouter.get("/:id", async (req, res, next) => {
             status: familyMember.status,
             isCurrentlyIn: familyMember.checkinEvents.length > 0,
             checkedInAt: familyMember.checkinEvents[0]?.checkedInAt.toISOString() ?? null
-          })),
-        hiddenMembers: person.membership.persons
-          .filter((familyMember) => familyMember.status === "INACTIVE")
-          .map((familyMember) => ({
-            personId: familyMember.id,
-            name: fullName(familyMember),
-            relationship: familyMember.relationship
           })),
         history: person.checkinEvents.map((event) => ({
           eventId: event.id,

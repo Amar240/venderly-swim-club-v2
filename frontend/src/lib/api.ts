@@ -208,11 +208,6 @@ export interface MemberDetail {
     guestPassesUsedToday: number;
   };
   family: MemberDetailFamilyMember[];
-  hiddenMembers: Array<{
-    personId: string;
-    name: string;
-    relationship: string;
-  }>;
   history: MemberHistoryEvent[];
 }
 
@@ -448,13 +443,8 @@ export const postAddPerson = async (
   return response.data;
 };
 
-export const deletePerson = async (personId: string): Promise<{ personId: string; status: string }> => {
-  const response = await api.delete<{ personId: string; status: string }>(`/members/persons/${personId}`);
-  return response.data;
-};
-
-export const restorePerson = async (personId: string): Promise<{ personId: string; status: string }> => {
-  const response = await api.patch<{ personId: string; status: string }>(`/members/persons/${personId}/restore`);
+export const deletePerson = async (personId: string): Promise<{ personId: string }> => {
+  const response = await api.delete<{ personId: string }>(`/members/persons/${personId}`);
   return response.data;
 };
 

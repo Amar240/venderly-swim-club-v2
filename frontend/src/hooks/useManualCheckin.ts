@@ -119,7 +119,7 @@ export const useManualCheckin = () => {
 
       return { previousActive, previousSummary, previousDetail, detailPersonId: person.detailPersonId };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       if (context?.previousActive) {
         queryClient.setQueryData(["dashboard", "active"], context.previousActive);
       }
@@ -132,7 +132,8 @@ export const useManualCheckin = () => {
         queryClient.setQueryData(["members", "detail", context.detailPersonId], context.previousDetail);
       }
 
-      toast.error("Couldn't check in");
+      const message = (error as any)?.response?.data?.error?.message ?? "Couldn't check in";
+      toast.error(message);
     },
     onSuccess: (data) => {
       toast.success(`✓ Welcome ${data.personName}!`);

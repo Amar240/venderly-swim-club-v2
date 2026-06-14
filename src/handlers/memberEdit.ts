@@ -449,7 +449,7 @@ export const addPersonToMembership: RequestHandler = async (req, res, next) => {
   }
 };
 
-export const softDeletePerson: RequestHandler = async (req, res, next) => {
+export const deletePerson: RequestHandler = async (req, res, next) => {
   try {
     const staffResponse = res as StaffResponse;
     const clubId = staffResponse.locals.staff.clubId;
@@ -460,10 +460,14 @@ export const softDeletePerson: RequestHandler = async (req, res, next) => {
       select: {
         id: true,
         membershipId: true,
+        isPrimary: true,
         firstName: true,
         lastName: true,
-        isPrimary: true,
-        status: true
+        membership: {
+          select: {
+            maxMembers: true
+          }
+        }
       }
     });
 
@@ -485,75 +489,44 @@ export const softDeletePerson: RequestHandler = async (req, res, next) => {
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.person.update({
-        where: { id },
-        data: { status: "INACTIVE" }
+      await tx.memberEditLog.deleteMany({
+        where: { personId: id }
       });
+
+      await tx.checkinEvent.updateMany({
+        where: { personId: id, clubId },
+        data: { personId: null }
+      });
+
+      await tx.membership.update({
+        where: { id: person.membershipId },
+        data: {
+          maxMembers: Math.max(1, person.membership.maxMembers - 1)
+        }
+      });
+
+      await tx.person.delete({
+        where: { id }
+      });
+
+      const targetLabel = fullName(person);
 
       await tx.memberEditLog.create({
         data: {
           clubId,
           staffId,
           targetType: "person_remove",
-          personId: id,
+          personId: null,
           membershipId: person.membershipId,
-          targetLabel: fullName(person),
-          changes: { status: { from: person.status, to: "INACTIVE" } } as Prisma.InputJsonValue
+          targetLabel,
+          changes: {
+            deleted: { from: targetLabel, to: null }
+          } as Prisma.InputJsonValue
         }
       });
     });
 
-    res.json({ personId: id, status: "INACTIVE" });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const restorePerson: RequestHandler = async (req, res, next) => {
-  try {
-    const staffResponse = res as StaffResponse;
-    const clubId = staffResponse.locals.staff.clubId;
-    const staffId = staffResponse.locals.staff.id;
-    const { id } = paramsSchema.parse(req.params);
-    const person = await prisma.person.findFirst({
-      where: { id, clubId },
-      select: {
-        id: true,
-        membershipId: true,
-        firstName: true,
-        lastName: true,
-        status: true
-      }
-    });
-
-    if (!person) {
-      throw new HttpError(404, "PERSON_NOT_FOUND", "Member was not found");
-    }
-
-    if (person.status !== "INACTIVE") {
-      throw new HttpError(409, "PERSON_NOT_INACTIVE", "Only hidden members can be restored");
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.person.update({
-        where: { id },
-        data: { status: "ACTIVE" }
-      });
-
-      await tx.memberEditLog.create({
-        data: {
-          clubId,
-          staffId,
-          targetType: "person_restore",
-          personId: id,
-          membershipId: person.membershipId,
-          targetLabel: fullName(person),
-          changes: { status: { from: "INACTIVE", to: "ACTIVE" } } as Prisma.InputJsonValue
-        }
-      });
-    });
-
-    res.json({ personId: id, status: "ACTIVE" });
+    res.json({ personId: id });
   } catch (error) {
     next(error);
   }

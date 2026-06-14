@@ -6,7 +6,6 @@ import {
   patchEmergency,
   patchPerson,
   postAddPerson,
-  restorePerson,
   type AddPersonResponse,
   type MemberDetailFamilyMember,
   type MemberDetailResponse
@@ -237,22 +236,8 @@ export const useAddPerson = (membershipId: string | undefined, detailPersonId: s
 export const useDeletePerson = (detailPersonId: string | null) => {
   const invalidate = useInvalidateMemberData(detailPersonId);
 
-  return useMutation<{ personId: string; status: string }, unknown, string>({
+  return useMutation<{ personId: string }, unknown, string>({
     mutationFn: (personId) => deletePerson(personId),
-    onSettled: async () => {
-      await invalidate();
-    }
-  });
-};
-
-export const useRestorePerson = (detailPersonId: string | null) => {
-  const invalidate = useInvalidateMemberData(detailPersonId);
-
-  return useMutation<{ personId: string; status: string }, unknown, string>({
-    mutationFn: (personId) => restorePerson(personId),
-    onError: () => {
-      toast.error("Couldn't restore the member");
-    },
     onSettled: async () => {
       await invalidate();
     }

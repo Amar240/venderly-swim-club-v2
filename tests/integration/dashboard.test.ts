@@ -82,3 +82,51 @@ describe("GET /api/v1/dashboard/recent (integration)", () => {
     });
   });
 });
+
+describe("POST /api/v1/dashboard/checkin/manual (integration)", () => {
+  let clubId: string;
+  let staffToken: string;
+
+  beforeEach(async () => {
+    await resetDb();
+    const club = await seedClub();
+    clubId = club.id;
+    const staff = await seedStaff({ clubId, name: "Staff", email: "staff@example.com", role: "STAFF" });
+    staffToken = loginToken(staff);
+  });
+
+  it("uses active family size as the capacity floor when maxMembers is stale", async () => {
+    const { membership, persons } = await seedMembership({
+      clubId,
+      maxMembers: 1,
+      persons: [
+        { firstName: "Kelly", lastName: "Oldis" },
+        { firstName: "Tyler", lastName: "Oldis" }
+      ]
+    });
+    await prisma.checkinEvent.create({
+      data: {
+        clubId,
+        personId: persons[0]!.id,
+        membershipId: membership.id,
+        eventType: "check_in",
+        isActive: true,
+        checkedInAt: new Date(),
+        source: "test_seed"
+      }
+    });
+
+    const app = await getTestApp();
+    const response = await request(app)
+      .post("/api/v1/dashboard/checkin/manual")
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ personId: persons[1]!.id, numGuests: 0 });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      success: true,
+      personName: "Tyler Oldis",
+      currentlyCheckedIn: 2
+    });
+  });
+});

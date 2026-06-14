@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
@@ -29,10 +30,14 @@ export const Login = () => {
       try {
         await login(nextPin);
         navigate("/dashboard", { replace: true });
-      } catch {
+      } catch (error) {
         setIsShaking(true);
         setPin("");
-        toast.error("Invalid PIN. Please try again.");
+        toast.error(
+          axios.isAxiosError(error) && error.response?.status === 429
+            ? "Too many attempts. Wait a few minutes and try again."
+            : "Invalid PIN. Please try again."
+        );
         window.setTimeout(() => setIsShaking(false), 500);
       } finally {
         setIsSubmitting(false);

@@ -17,6 +17,7 @@
     "frontend:build": "cd frontend && npm run build",
     "import:members": "ts-node scripts/importMembers.ts",
     "seed:admin": "ts-node scripts/seedAdmin.ts",
+    "seed:local": "ts-node scripts/seedLocalDev.ts",
     "backfill:guest-passes": "ts-node scripts/applyGuestPassRule.ts",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "db:generate": "prisma generate",

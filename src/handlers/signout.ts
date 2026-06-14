@@ -270,7 +270,9 @@ export const signOutHandler: RequestHandler = async (req, res, next) => {
         });
       });
 
-      const signedOut = activeCheckins.map((checkin) => fullName(checkin.person));
+      const signedOut = activeCheckins
+        .filter((checkin) => checkin.person)
+        .map((checkin) => fullName(checkin.person!));
       const count = signedOut.length;
 
       res.status(200).json({

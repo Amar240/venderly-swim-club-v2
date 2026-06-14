@@ -9,7 +9,6 @@ import {
   Phone,
   Ticket,
   Trash2,
-  Undo2,
   UserPlus,
   X,
   type LucideIcon
@@ -23,7 +22,6 @@ import { useManualCheckin } from "../hooks/useManualCheckin";
 import {
   useAddPerson,
   useDeletePerson,
-  useRestorePerson,
   useUpdateAddress,
   useUpdateEmergency,
   useUpdatePerson
@@ -172,7 +170,7 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
   const [editing, setEditing] = useState<EditingSection>(null);
   const [addingMember, setAddingMember] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<MemberDetailFamilyMember | null>(null);
-  const [showHidden, setShowHidden] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const clickedRowRef = useRef<HTMLDivElement | null>(null);
   const { reduced } = useMotion();
   const manualCheckin = useManualCheckin();
@@ -182,7 +180,6 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
   const emergencyMutation = useUpdateEmergency(member.membership.membershipId, clickedPersonId);
   const addPersonMutation = useAddPerson(member.membership.membershipId, clickedPersonId);
   const deletePersonMutation = useDeletePerson(clickedPersonId);
-  const restorePersonMutation = useRestorePerson(clickedPersonId);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -192,14 +189,15 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
     setEditing(null);
     setAddingMember(false);
     setConfirmDelete(null);
-    setShowHidden(false);
+    setDeleteConfirmText("");
   }, [member.membership.membershipId]);
 
   const removePerson = (person: MemberDetailFamilyMember) => {
     deletePersonMutation.mutate(person.personId, {
       onSuccess: () => {
-        toast.success(`${person.name} removed. They can be restored anytime.`);
+        toast.success(`${person.name} has been removed`);
         setConfirmDelete(null);
+        setDeleteConfirmText("");
       },
       onError: (error) => {
         const code =
@@ -214,9 +212,14 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
               : "Couldn't remove the member."
         );
         setConfirmDelete(null);
+        setDeleteConfirmText("");
       }
     });
   };
+
+  useEffect(() => {
+    setDeleteConfirmText("");
+  }, [confirmDelete?.personId]);
 
   useEffect(() => {
     if (clickedRowRef.current) {
@@ -468,47 +471,6 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
               Add member
             </Button>
           )}
-          {member.hiddenMembers.length > 0 && (
-            <div className="rounded-xl border border-dashed border-brand-border">
-              <button
-                type="button"
-                onClick={() => setShowHidden((value) => !value)}
-                className="flex min-h-11 w-full items-center justify-between px-4 text-left text-sm font-semibold text-slate-500"
-              >
-                Hidden members ({member.hiddenMembers.length})
-                <span className="text-brand-primary">{showHidden ? "Hide" : "Show"}</span>
-              </button>
-              {showHidden && (
-                <div className="space-y-2 border-t border-dashed border-brand-border p-3">
-                  {member.hiddenMembers.map((hidden) => (
-                    <div
-                      key={hidden.personId}
-                      className="flex items-center justify-between rounded-lg bg-brand-background/50 p-3"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-slate-500">{hidden.name}</p>
-                        <p className="text-xs text-slate-400">{hidden.relationship}</p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={restorePersonMutation.isPending}
-                        onClick={() =>
-                          restorePersonMutation.mutate(hidden.personId, {
-                            onSuccess: () => toast.success(`${hidden.name} restored.`)
-                          })
-                        }
-                        className="h-11 shrink-0 border-brand-border"
-                      >
-                        <Undo2 className="h-4 w-4" />
-                        Restore
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
           {member.membership.currentGuestsInPool > 0 ? (
             <div className="mt-2 flex items-center gap-2 rounded-lg bg-brand-background/60 px-4 py-3 text-sm text-slate-600">
               <Ticket className="h-4 w-4 text-brand-primary" aria-hidden />
@@ -518,21 +480,47 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
         </div>
       </section>
 
-      <Dialog open={confirmDelete !== null} onOpenChange={(dialogOpen) => !dialogOpen && setConfirmDelete(null)}>
+      <Dialog
+        open={confirmDelete !== null}
+        onOpenChange={(dialogOpen) => {
+          if (!dialogOpen) {
+            setConfirmDelete(null);
+            setDeleteConfirmText("");
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Remove {confirmDelete?.name} from this membership?</DialogTitle>
             <DialogDescription>
-              They can be restored later. This does not delete their visit history.
+              This cannot be undone. Type DELETE to permanently remove them.
             </DialogDescription>
           </DialogHeader>
+          <div className="grid gap-2 py-2">
+            <Label htmlFor="delete-confirm">Confirmation</Label>
+            <Input
+              id="delete-confirm"
+              value={deleteConfirmText}
+              onChange={(event) => setDeleteConfirmText(event.target.value)}
+              placeholder="Type DELETE"
+              autoComplete="off"
+            />
+          </div>
           <DialogFooter className="gap-2 sm:gap-2">
-            <Button type="button" variant="outline" disabled={deletePersonMutation.isPending} onClick={() => setConfirmDelete(null)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deletePersonMutation.isPending}
+              onClick={() => {
+                setConfirmDelete(null);
+                setDeleteConfirmText("");
+              }}
+            >
               Cancel
             </Button>
             <Button
               type="button"
-              disabled={deletePersonMutation.isPending}
+              disabled={deletePersonMutation.isPending || deleteConfirmText !== "DELETE"}
               onClick={() => confirmDelete && removePerson(confirmDelete)}
               className="bg-red-600 text-white hover:bg-red-700"
             >

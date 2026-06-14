@@ -149,7 +149,7 @@ model Person {
 model CheckinEvent {
   id                  String             @id @default(uuid())
   clubId              String             @map("club_id")
-  personId            String             @map("person_id")
+  personId            String?            @map("person_id")
   membershipId        String?            @map("membership_id")
   guestPassPurchaseId String?            @map("guest_pass_purchase_id")
   staffId             String?            @map("staff_id")
@@ -164,7 +164,7 @@ model CheckinEvent {
   createdAt           DateTime           @default(now()) @map("created_at")
   updatedAt           DateTime           @updatedAt @map("updated_at")
   club                Club               @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  person              Person             @relation(fields: [personId], references: [id], onDelete: Cascade)
+  person              Person?            @relation(fields: [personId], references: [id], onDelete: SetNull)
   membership          Membership?        @relation(fields: [membershipId], references: [id], onDelete: SetNull)
   guestPassPurchase   GuestPassPurchase? @relation(fields: [guestPassPurchaseId], references: [id], onDelete: SetNull)
   staff               Staff?             @relation(fields: [staffId], references: [id], onDelete: SetNull)

@@ -30,6 +30,12 @@ const formatFieldName = (field: string): string =>
     .replace(/^./, (letter) => letter.toUpperCase())
     .trim();
 
+const formatEditAction = (targetType: string): string => {
+  if (targetType === "person_remove") return "Removed";
+  if (targetType === "person_add") return "Added";
+  return "Edited";
+};
+
 export const AdminActivity = () => {
   const [activeFeed, setActiveFeed] = useState<"checkins" | "edits">("checkins");
   const [staffId, setStaffId] = useState("");
@@ -173,6 +179,7 @@ export const AdminActivity = () => {
               <TableRow>
                 <TableHead>Time</TableHead>
                 <TableHead>Staff</TableHead>
+                <TableHead>Action</TableHead>
                 <TableHead>Member</TableHead>
                 <TableHead>Changes</TableHead>
               </TableRow>
@@ -195,6 +202,19 @@ export const AdminActivity = () => {
                   <TableRow key={event.id}>
                     <TableCell className="font-medium text-brand-navy">{event.time}</TableCell>
                     <TableCell>{event.staff.name}</TableCell>
+                    <TableCell>
+                      <Badge
+                        className={
+                          event.targetType === "person_remove"
+                            ? "bg-brand-danger text-white"
+                            : event.targetType === "person_add"
+                              ? "bg-brand-success text-white"
+                              : "bg-brand-primary text-white"
+                        }
+                      >
+                        {formatEditAction(event.targetType)}
+                      </Badge>
+                    </TableCell>
                     <TableCell>{event.targetLabel}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-2">

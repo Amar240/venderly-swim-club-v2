@@ -161,16 +161,18 @@ export const getActiveCheckins: RequestHandler = async (_req, res, next) => {
     });
 
     res.json({
-      count: checkins.length,
-      persons: checkins.map((checkin) => ({
-        personId: checkin.person.id,
-        firstName: checkin.person.firstName,
-        lastName: checkin.person.lastName,
-        membershipTier: checkin.person.membership.tier,
-        checkedInAt: checkin.checkedInAt.toISOString(),
-        numGuests: checkin.numGuests,
-        checkinEventId: checkin.id
-      }))
+      count: checkins.filter((checkin) => checkin.person).length,
+      persons: checkins
+        .filter((checkin) => checkin.person)
+        .map((checkin) => ({
+          personId: checkin.person!.id,
+          firstName: checkin.person!.firstName,
+          lastName: checkin.person!.lastName,
+          membershipTier: checkin.person!.membership.tier,
+          checkedInAt: checkin.checkedInAt.toISOString(),
+          numGuests: checkin.numGuests,
+          checkinEventId: checkin.id
+        }))
     });
   } catch (error) {
     next(error);
@@ -214,12 +216,13 @@ export const getRecentCheckinEvents: RequestHandler = async (req, res, next) => 
     });
 
     const events = checkins
+      .filter((event) => event.person)
       .map((event) => ({
         eventId: event.id,
-        personId: event.person.id,
+        personId: event.person!.id,
         eventType: event.signedOutAt ? "sign_out" : event.eventType,
-        personName: fullName(event.person),
-        membershipTier: event.person.membership.tier,
+        personName: fullName(event.person!),
+        membershipTier: event.person!.membership.tier,
         // One row per visit: both halves of the check-in/sign-out pair.
         checkedInAt: event.checkedInAt.toISOString(),
         signedOutAt: event.signedOutAt?.toISOString() ?? null,
@@ -359,7 +362,9 @@ export const manualSignout: RequestHandler = async (req, res, next) => {
         });
       });
 
-      const signedOut = activeCheckins.map((checkin) => fullName(checkin.person));
+      const signedOut = activeCheckins
+        .filter((checkin) => checkin.person)
+        .map((checkin) => fullName(checkin.person!));
       const count = signedOut.length;
 
       res.json({
@@ -408,7 +413,7 @@ export const manualSignout: RequestHandler = async (req, res, next) => {
 
     res.json({
       success: true,
-      message: `Signed out ${fullName(activeCheckin.person)}`
+      message: `Signed out ${activeCheckin.person ? fullName(activeCheckin.person) : "member"}`
     });
   } catch (error) {
     next(error);
@@ -472,8 +477,15 @@ export const manualCheckin: RequestHandler = async (req, res, next) => {
     const activeMembershipCheckins = await prisma.checkinEvent.count({
       where: { membershipId: person.membershipId, isActive: true }
     });
+    const totalActivePersons = await prisma.person.count({
+      where: {
+        membershipId: person.membershipId,
+        status: "ACTIVE"
+      }
+    });
+    const effectiveCapacity = Math.max(person.membership.maxMembers, totalActivePersons);
 
-    if (activeMembershipCheckins >= person.membership.maxMembers) {
+    if (activeMembershipCheckins >= effectiveCapacity) {
       throw new HttpError(403, "MEMBERSHIP_AT_CAPACITY", "Membership is at capacity");
     }
 

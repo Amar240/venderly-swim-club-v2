@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import bcrypt from "bcrypt";
 import request from "supertest";
 import { prisma } from "../../src/lib/prisma";
@@ -11,18 +11,27 @@ describe("Admin staff CRUD (integration)", () => {
   let adminId: string;
   let adminToken: string;
   let staffToken: string;
+  let createdStaffIds: string[] = [];
 
   const api = async () => getTestApp();
 
   beforeEach(async () => {
     await resetDb();
+    createdStaffIds = [];
     const club = await seedClub();
     clubId = club.id;
     const admin = await seedStaff({ clubId, name: "Admin", email: "admin@example.com", pin: "1234", role: "ADMIN" });
     const staff = await seedStaff({ clubId, name: "Front Desk", email: "desk@example.com", pin: "2026", role: "STAFF" });
+    createdStaffIds.push(admin.id, staff.id);
     adminId = admin.id;
     adminToken = loginToken(admin);
     staffToken = loginToken(staff);
+  });
+
+  afterEach(async () => {
+    if (createdStaffIds.length > 0) {
+      await prisma.staff.deleteMany({ where: { id: { in: createdStaffIds } } });
+    }
   });
 
   afterAll(async () => {
@@ -55,6 +64,7 @@ describe("Admin staff CRUD (integration)", () => {
     expect(response.body.staff).toMatchObject({ name: "Lifeguard", role: "STAFF", isActive: true });
 
     const created = await prisma.staff.findUniqueOrThrow({ where: { email: "guard@example.com" } });
+    createdStaffIds.push(created.id);
     expect(created.passwordHash).not.toBe("5678"); // never plaintext
     expect(await bcrypt.compare("5678", created.passwordHash)).toBe(true);
   });
