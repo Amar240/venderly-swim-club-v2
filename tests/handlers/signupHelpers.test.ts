@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cleanPhoneNumber,
+  emergencyEmailSchema,
   normalizeName,
   parseAge,
   parseMembershipTier,
@@ -26,6 +27,18 @@ describe("cleanPhoneNumber", () => {
   it("returns undefined when no digits are present", () => {
     expect(cleanPhoneNumber("abc")).toBeUndefined();
     expect(cleanPhoneNumber("")).toBeUndefined();
+  });
+});
+
+describe("emergencyEmailSchema", () => {
+  it("drops empty or malformed optional emergency emails", () => {
+    for (const value of ["", "no email", "I dont have one", "jen@gm", "N/@", "skip", undefined]) {
+      expect(emergencyEmailSchema.parse(value)).toBeUndefined();
+    }
+  });
+
+  it("trims and keeps valid emergency emails", () => {
+    expect(emergencyEmailSchema.parse("  jen@example.com  ")).toBe("jen@example.com");
   });
 });
 

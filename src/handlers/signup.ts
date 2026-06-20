@@ -8,6 +8,27 @@ import { HttpError } from "../middleware/errorHandler";
 
 const FAMILY_MEMBER_ORDINALS = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th"] as const;
 
+export const emergencyEmailSchema = z.preprocess((value) => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const probe = z.string().email().safeParse(trimmed);
+
+  if (!probe.success) {
+    logger.info("Dropping malformed emergency email", { value: trimmed });
+    return undefined;
+  }
+
+  return trimmed;
+}, z.string().email().optional());
+
 const signupSchema = z
   .object({
     location: z
@@ -18,7 +39,7 @@ const signupSchema = z
     contact_id: z.string().min(1),
     first_name: z.string().min(1),
     last_name: z.string().min(1),
-    email: z.string().email(),
+    email: z.string().trim().email(),
     phone: z.string().optional(),
     triggerData: z.record(z.unknown()).optional(),
     payment: z
@@ -41,7 +62,7 @@ const signupSchema = z
     "Include name(s) & age(s) of your child/children:": z.string().optional(),
     "Emergency Contact Full Name": z.string().optional(),
     "Emergency Contact Mobile Number": z.string().optional(),
-    "Emergency Contact Email": z.string().email().optional(),
+    "Emergency Contact Email": emergencyEmailSchema,
     "Street Address": z.string().optional(),
     "City": z.string().optional(),
     "State": z.string().optional(),

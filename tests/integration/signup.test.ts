@@ -88,6 +88,26 @@ describe("POST /webhooks/ghl/signup (integration)", () => {
     expect(membership.guestPassesTotal).toBe(0);
   });
 
+  it("treats N/@ emergency contact email as missing", async () => {
+    const response = await postSignup(buildSignupPayload({ "Emergency Contact Email": "N/@" }));
+
+    expect(response.status).toBe(200);
+
+    const persons = await prisma.person.findMany();
+    expect(persons).toHaveLength(3);
+    expect(persons.every((person) => person.emergencyContactEmail === null)).toBe(true);
+  });
+
+  it("trims and treats N/A emergency contact email as missing", async () => {
+    const response = await postSignup(buildSignupPayload({ "Emergency Contact Email": "  N/A  " }));
+
+    expect(response.status).toBe(200);
+
+    const persons = await prisma.person.findMany();
+    expect(persons).toHaveLength(3);
+    expect(persons.every((person) => person.emergencyContactEmail === null)).toBe(true);
+  });
+
   it("re-firing the same contact_id updates the membership instead of duplicating", async () => {
     const first = await postSignup(buildSignupPayload());
     expect(first.status).toBe(200);
