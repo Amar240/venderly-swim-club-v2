@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { useManualSignout } from "../hooks/useDashboard";
 import { useManualCheckin } from "../hooks/useManualCheckin";
 import {
+  useAdjustGuestPasses,
   useAddPerson,
   useDeletePerson,
   useUpdateAddress,
@@ -28,7 +29,8 @@ import {
 } from "../hooks/useMemberEdit";
 import { useMemberDetail } from "../hooks/useMembers";
 import { useMotion } from "../hooks/useMotion";
-import type { MemberDetail, MemberDetailFamilyMember, MemberDetailResponse } from "../lib/api";
+import { useAuth } from "../hooks/useAuth";
+import type { GuestPassAdjustmentReason, MemberDetail, MemberDetailFamilyMember, MemberDetailResponse } from "../lib/api";
 import { slideInRight } from "../lib/motion";
 import { cn } from "../lib/utils";
 import { GuestPassBar } from "./GuestPassBar";
@@ -43,6 +45,15 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Skeleton } from "./ui/skeleton";
 
 const NO_ALLERGY_PATTERNS = /^(no|none|n\/?a|nothing|nope|no allergies|n|\/|-)$/i;
+
+const GUEST_PASS_REASON_LABELS: Record<GuestPassAdjustmentReason, string> = {
+  purchase: "Manual purchase",
+  comp: "Complimentary passes",
+  error_fix: "Error correction",
+  other: "Other"
+};
+
+const QUICK_PASS_ADJUSTMENTS = [1, 5, 10, -1, -5, -10] as const;
 
 type EditingSection =
   | { type: "person"; personId: string }
@@ -171,14 +182,21 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
   const [addingMember, setAddingMember] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<MemberDetailFamilyMember | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [adjustPassesOpen, setAdjustPassesOpen] = useState(false);
+  const [passAdjustmentInput, setPassAdjustmentInput] = useState("");
+  const [passAdjustmentReason, setPassAdjustmentReason] = useState<GuestPassAdjustmentReason>("purchase");
+  const [passAdjustmentNotes, setPassAdjustmentNotes] = useState("");
   const clickedRowRef = useRef<HTMLDivElement | null>(null);
   const { reduced } = useMotion();
+  const { staff } = useAuth();
+  const isAdmin = staff?.role === "ADMIN";
   const manualCheckin = useManualCheckin();
   const manualSignout = useManualSignout();
   const personMutation = useUpdatePerson(clickedPersonId, editing?.type === "person" ? editing.personId : "");
   const addressMutation = useUpdateAddress(member.membership.membershipId, clickedPersonId);
   const emergencyMutation = useUpdateEmergency(member.membership.membershipId, clickedPersonId);
   const addPersonMutation = useAddPerson(member.membership.membershipId, clickedPersonId);
+  const adjustGuestPassesMutation = useAdjustGuestPasses(member.membership.membershipId, clickedPersonId);
   const deletePersonMutation = useDeletePerson(clickedPersonId);
   const queryClient = useQueryClient();
 
@@ -190,6 +208,10 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
     setAddingMember(false);
     setConfirmDelete(null);
     setDeleteConfirmText("");
+    setAdjustPassesOpen(false);
+    setPassAdjustmentInput("");
+    setPassAdjustmentReason("purchase");
+    setPassAdjustmentNotes("");
   }, [member.membership.membershipId]);
 
   const removePerson = (person: MemberDetailFamilyMember) => {
@@ -215,6 +237,60 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
         setDeleteConfirmText("");
       }
     });
+  };
+
+  const resetPassAdjustmentDialog = () => {
+    setPassAdjustmentInput("");
+    setPassAdjustmentReason("purchase");
+    setPassAdjustmentNotes("");
+  };
+
+  const parsedPassAdjustment = Number.parseInt(passAdjustmentInput, 10);
+  const isPassAdjustmentValid =
+    passAdjustmentInput.trim() !== "" &&
+    /^[-+]?\d+$/.test(passAdjustmentInput.trim()) &&
+    Number.isInteger(parsedPassAdjustment) &&
+    parsedPassAdjustment !== 0;
+
+  const savePassAdjustment = () => {
+    if (!isPassAdjustmentValid) {
+      toast.error("Enter a non-zero whole number");
+      return;
+    }
+
+    const notes = passAdjustmentNotes.trim();
+
+    adjustGuestPassesMutation.mutate(
+      {
+        quantity: parsedPassAdjustment,
+        reason: passAdjustmentReason,
+        ...(notes ? { notes } : {})
+      },
+      {
+        onSuccess: () => {
+          const abs = Math.abs(parsedPassAdjustment);
+          toast.success(
+            parsedPassAdjustment > 0
+              ? `+${abs} passes added to ${accountHolder.name}`
+              : `${abs} passes removed from ${accountHolder.name}`
+          );
+          setAdjustPassesOpen(false);
+          resetPassAdjustmentDialog();
+        },
+        onError: (error) => {
+          const code =
+            axios.isAxiosError(error) && typeof error.response?.data?.error?.code === "string"
+              ? error.response.data.error.code
+              : null;
+
+          toast.error(
+            code === "INSUFFICIENT_PASSES"
+              ? `Cannot remove — member has used ${member.membership.guestPassesUsed} passes`
+              : "Couldn't adjust guest passes"
+          );
+        }
+      }
+    );
   };
 
   useEffect(() => {
@@ -319,11 +395,42 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
       </div>
 
       <div className="rounded-xl border border-brand-border bg-brand-background/70 p-4">
-        <GuestPassBar
-          total={member.membership.guestPassesTotal}
-          used={member.membership.guestPassesUsed}
-          usedToday={member.membership.guestPassesUsedToday}
-        />
+        {member.membership.guestPassesTotal === 0 ? (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-brand-navy">Guest Passes</p>
+              <p className="mt-1 text-sm text-slate-600">No guest passes purchased</p>
+            </div>
+            {isAdmin ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAdjustPassesOpen(true)}
+                className="self-start border-brand-primary text-brand-primary hover:bg-white sm:self-auto"
+              >
+                + Add Passes
+              </Button>
+            ) : null}
+          </div>
+        ) : (
+          <GuestPassBar
+            total={member.membership.guestPassesTotal}
+            used={member.membership.guestPassesUsed}
+            usedToday={member.membership.guestPassesUsedToday}
+            action={
+              isAdmin ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setAdjustPassesOpen(true)}
+                  className="h-9 border-brand-primary px-3 text-brand-primary hover:bg-white"
+                >
+                  Adjust
+                </Button>
+              ) : undefined
+            }
+          />
+        )}
       </div>
 
       {guestPassesRemaining > 0 ? (
@@ -479,6 +586,134 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
           ) : null}
         </div>
       </section>
+
+      <Dialog
+        open={adjustPassesOpen}
+        onOpenChange={(dialogOpen) => {
+          setAdjustPassesOpen(dialogOpen);
+          if (!dialogOpen) {
+            resetPassAdjustmentDialog();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Adjust Guest Passes</DialogTitle>
+            <DialogDescription>{accountHolder.name}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5 py-2">
+            <div className="grid grid-cols-3 gap-2 rounded-lg border border-brand-border bg-brand-background/70 p-3 text-center">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total</p>
+                <p className="mt-1 text-lg font-bold tabular-nums text-brand-navy">{member.membership.guestPassesTotal}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Used</p>
+                <p className="mt-1 text-lg font-bold tabular-nums text-brand-navy">{member.membership.guestPassesUsed}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Remaining</p>
+                <p className="mt-1 text-lg font-bold tabular-nums text-brand-navy">{guestPassesRemaining}</p>
+              </div>
+            </div>
+
+            <div className="grid gap-3">
+              <div>
+                <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Quick add</Label>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {QUICK_PASS_ADJUSTMENTS.filter((value) => value > 0).map((value) => (
+                    <Button
+                      key={value}
+                      type="button"
+                      variant="outline"
+                      onClick={() => setPassAdjustmentInput(String(value))}
+                      className="border-brand-border bg-white"
+                    >
+                      +{value}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Quick remove</Label>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {QUICK_PASS_ADJUSTMENTS.filter((value) => value < 0).map((value) => (
+                    <Button
+                      key={value}
+                      type="button"
+                      variant="outline"
+                      onClick={() => setPassAdjustmentInput(String(value))}
+                      className="border-brand-border bg-white"
+                    >
+                      {value}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="min-w-0">
+                <EditField label="Custom adjustment">
+                  <Input
+                    inputMode="numeric"
+                    value={passAdjustmentInput}
+                    onChange={(event) => setPassAdjustmentInput(event.target.value)}
+                    placeholder="+10 or -3"
+                  />
+                </EditField>
+              </div>
+              <div className="min-w-0">
+                <EditField label="Reason">
+                  <select
+                    value={passAdjustmentReason}
+                    onChange={(event) => setPassAdjustmentReason(event.target.value as GuestPassAdjustmentReason)}
+                    className="h-11 w-full max-w-full min-w-0 rounded-md border border-brand-border bg-white px-3 text-sm text-brand-navy"
+                  >
+                    <option value="purchase">{GUEST_PASS_REASON_LABELS.purchase}</option>
+                    <option value="comp">{GUEST_PASS_REASON_LABELS.comp}</option>
+                    <option value="error_fix">{GUEST_PASS_REASON_LABELS.error_fix}</option>
+                    <option value="other">{GUEST_PASS_REASON_LABELS.other}</option>
+                  </select>
+                  <p className="mt-1 text-sm text-slate-500">Use this when a purchase was not linked to the member.</p>
+                </EditField>
+              </div>
+              <div className="md:col-span-2">
+                <EditField label="Notes">
+                  <Input
+                    value={passAdjustmentNotes}
+                    onChange={(event) => setPassAdjustmentNotes(event.target.value)}
+                    placeholder="Optional"
+                  />
+                </EditField>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={adjustGuestPassesMutation.isPending}
+              onClick={() => {
+                setAdjustPassesOpen(false);
+                resetPassAdjustmentDialog();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={adjustGuestPassesMutation.isPending || !isPassAdjustmentValid}
+              onClick={savePassAdjustment}
+              className="bg-brand-primary hover:bg-brand-primaryHover"
+            >
+              {adjustGuestPassesMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={confirmDelete !== null}

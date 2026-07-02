@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { cleanPhone, computeFieldChanges, updateEmergencySchema, updatePersonSchema } from "../../src/handlers/memberEdit";
+import {
+  adjustGuestPassesSchema,
+  calculateGuestPassAdjustment,
+  cleanPhone,
+  computeFieldChanges,
+  updateEmergencySchema,
+  updatePersonSchema
+} from "../../src/handlers/memberEdit";
 
 describe("cleanPhone", () => {
   it("normalizes phone numbers to 10 digits", () => {
@@ -62,5 +69,24 @@ describe("updateEmergencySchema", () => {
 
   it("rejects invalid email", () => {
     expect(() => updateEmergencySchema.parse({ emergencyContactEmail: "bad" })).toThrow();
+  });
+});
+
+describe("adjustGuestPassesSchema", () => {
+  it("rejects a zero quantity", () => {
+    expect(() => adjustGuestPassesSchema.parse({ quantity: 0, reason: "purchase" })).toThrow();
+  });
+});
+
+describe("calculateGuestPassAdjustment", () => {
+  it("returns the new total for valid additions and removals", () => {
+    expect(calculateGuestPassAdjustment({ guestPassesTotal: 0, guestPassesUsed: 0, quantity: 10 })).toBe(10);
+    expect(calculateGuestPassAdjustment({ guestPassesTotal: 10, guestPassesUsed: 5, quantity: -3 })).toBe(7);
+  });
+
+  it("throws when removing below used passes", () => {
+    expect(() =>
+      calculateGuestPassAdjustment({ guestPassesTotal: 10, guestPassesUsed: 5, quantity: -6 })
+    ).toThrow("Cannot remove more guest passes than the member has available");
   });
 });

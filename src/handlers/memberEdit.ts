@@ -59,6 +59,12 @@ export const updateEmergencySchema = z.object({
   emergencyContactEmail: z.union([z.string().trim().email(), z.literal("")]).optional()
 });
 
+export const adjustGuestPassesSchema = z.object({
+  quantity: z.number().int().refine((value) => value !== 0, "Quantity must not be zero"),
+  reason: z.enum(["purchase", "comp", "error_fix", "other"]),
+  notes: z.string().trim().max(500).optional()
+});
+
 export type FieldChanges = Record<string, { from: string | null; to: string | null }>;
 
 const normalizeChangeValue = (value: unknown): string | null => {
@@ -111,6 +117,31 @@ const householdLabel = (persons: Array<{ firstName: string; lastName: string; is
 };
 
 const hasChanges = (changes: FieldChanges): boolean => Object.keys(changes).length > 0;
+
+export const calculateGuestPassAdjustment = ({
+  guestPassesTotal,
+  guestPassesUsed,
+  quantity
+}: {
+  guestPassesTotal: number;
+  guestPassesUsed: number;
+  quantity: number;
+}): number => {
+  const nextTotal = guestPassesTotal + quantity;
+
+  if (nextTotal < guestPassesUsed) {
+    throw new HttpError(409, "INSUFFICIENT_PASSES", "Cannot remove more guest passes than the member has available");
+  }
+
+  return nextTotal;
+};
+
+const membershipPrimaryLabel = (
+  persons: Array<{ firstName: string; lastName: string; isPrimary: boolean }>
+): string => {
+  const primary = persons.find((person) => person.isPrimary) ?? persons[0];
+  return primary ? fullName(primary) : "Membership";
+};
 
 export const updatePerson: RequestHandler = async (req, res, next) => {
   try {
@@ -357,6 +388,85 @@ export const updateMembershipEmergency: RequestHandler = async (req, res, next) 
       membershipId: id,
       updatedCount: result.count,
       ...data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const adjustGuestPasses: RequestHandler = async (req, res, next) => {
+  try {
+    const staffResponse = res as StaffResponse;
+    const clubId = staffResponse.locals.staff.clubId;
+    const staffId = staffResponse.locals.staff.id;
+    const { id } = paramsSchema.parse(req.params);
+    const input = adjustGuestPassesSchema.parse(req.body);
+    const membership = await prisma.membership.findFirst({
+      where: { id, clubId },
+      select: {
+        id: true,
+        guestPassesTotal: true,
+        guestPassesUsed: true,
+        persons: {
+          orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+          select: {
+            firstName: true,
+            lastName: true,
+            isPrimary: true
+          }
+        }
+      }
+    });
+
+    if (!membership) {
+      throw new HttpError(404, "MEMBERSHIP_NOT_FOUND", "Membership was not found");
+    }
+
+    const nextTotal = calculateGuestPassAdjustment({
+      guestPassesTotal: membership.guestPassesTotal,
+      guestPassesUsed: membership.guestPassesUsed,
+      quantity: input.quantity
+    });
+    const targetLabel = membershipPrimaryLabel(membership.persons);
+    const changes = {
+      guestPassesTotal: {
+        from: String(membership.guestPassesTotal),
+        to: String(nextTotal)
+      },
+      reason: input.reason,
+      ...(input.notes ? { notes: input.notes } : {})
+    } satisfies Prisma.InputJsonObject;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.membership.update({
+        where: { id },
+        data: { guestPassesTotal: nextTotal },
+        select: {
+          id: true,
+          guestPassesTotal: true,
+          guestPassesUsed: true
+        }
+      });
+
+      await tx.memberEditLog.create({
+        data: {
+          clubId,
+          staffId,
+          targetType: "guest_passes_adjust",
+          membershipId: id,
+          targetLabel,
+          changes
+        }
+      });
+
+      return result;
+    });
+
+    res.json({
+      membershipId: updated.id,
+      guestPassesTotal: updated.guestPassesTotal,
+      guestPassesUsed: updated.guestPassesUsed,
+      adjustment: input.quantity
     });
   } catch (error) {
     next(error);

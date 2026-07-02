@@ -215,6 +215,15 @@ export interface MemberDetailResponse {
   member: MemberDetail;
 }
 
+export type GuestPassAdjustmentReason = "purchase" | "comp" | "error_fix" | "other";
+
+export interface GuestPassAdjustmentResponse {
+  membershipId: string;
+  guestPassesTotal: number;
+  guestPassesUsed: number;
+  adjustment: number;
+}
+
 export interface ManualCheckinResponse {
   success: true;
   message: string;
@@ -255,7 +264,7 @@ export interface EditActivityEvent {
   };
   targetType: string;
   targetLabel: string;
-  changes: Record<string, { from: string | null; to: string | null }>;
+  changes: Record<string, unknown>;
 }
 
 export type ReportRange = "today" | "week" | "month" | "season";
@@ -440,6 +449,17 @@ export const postAddPerson = async (
   body: Record<string, unknown>
 ): Promise<AddPersonResponse> => {
   const response = await api.post<AddPersonResponse>(`/members/memberships/${membershipId}/persons`, body);
+  return response.data;
+};
+
+export const postAdjustGuestPasses = async (
+  membershipId: string,
+  body: { quantity: number; reason: GuestPassAdjustmentReason; notes?: string }
+): Promise<GuestPassAdjustmentResponse> => {
+  const response = await api.post<GuestPassAdjustmentResponse>(
+    `/members/memberships/${membershipId}/passes/adjust`,
+    body
+  );
   return response.data;
 };
 

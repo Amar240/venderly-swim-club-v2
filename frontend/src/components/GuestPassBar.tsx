@@ -1,6 +1,17 @@
+import type { ReactNode } from "react";
 import { cn } from "../lib/utils";
 
-export const GuestPassBar = ({ total, used, usedToday = 0 }: { total: number; used: number; usedToday?: number }) => {
+export const GuestPassBar = ({
+  total,
+  used,
+  usedToday = 0,
+  action
+}: {
+  total: number;
+  used: number;
+  usedToday?: number;
+  action?: ReactNode;
+}) => {
   const safeTotal = Math.max(total, 0);
   const safeUsed = Math.min(Math.max(used, 0), safeTotal);
   const remaining = Math.max(safeTotal - safeUsed, 0);
@@ -19,7 +30,10 @@ export const GuestPassBar = ({ total, used, usedToday = 0 }: { total: number; us
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3 text-sm">
         <span className="font-semibold text-brand-navy">Guest passes</span>
-        <span className="tabular-nums text-slate-600">{label}</span>
+        <span className="flex items-center gap-2">
+          <span className="tabular-nums text-slate-600">{label}</span>
+          {action}
+        </span>
       </div>
       <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.max(segments, 1)}, minmax(0, 1fr))` }}>
         {Array.from({ length: Math.max(segments, 1) }, (_, index) => (

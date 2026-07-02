@@ -10,6 +10,11 @@ const authPatch = async (path: string, token: string, body: Record<string, unkno
   return request(app).patch(path).set("Authorization", `Bearer ${token}`).send(body);
 };
 
+const authPost = async (path: string, token: string, body: Record<string, unknown>) => {
+  const app = await getTestApp();
+  return request(app).post(path).set("Authorization", `Bearer ${token}`).send(body);
+};
+
 const authGet = async (path: string, token: string) => {
   const app = await getTestApp();
   return request(app).get(path).set("Authorization", `Bearer ${token}`);
@@ -134,6 +139,138 @@ describe("member edit audit logging (integration)", () => {
 
     const staffResponse = await authGet("/api/v1/admin/edits", staffToken);
     expect(staffResponse.status).toBe(403);
+  });
+
+  describe("adjust guest passes", () => {
+    it("allows admins to add passes to a member with none", async () => {
+      const { membership } = await seedMembership({
+        clubId,
+        guestPassesTotal: 0,
+        guestPassesUsed: 0,
+        persons: [{ firstName: "Shyam", lastName: "Vivekanandan", email: "shyam@example.com" }]
+      });
+
+      const response = await authPost(`/api/v1/members/memberships/${membership.id}/passes/adjust`, adminToken, {
+        quantity: 10,
+        reason: "purchase"
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        membershipId: membership.id,
+        guestPassesTotal: 10,
+        guestPassesUsed: 0,
+        adjustment: 10
+      });
+      await expect(prisma.membership.findUniqueOrThrow({ where: { id: membership.id } })).resolves.toMatchObject({
+        guestPassesTotal: 10
+      });
+    });
+
+    it("allows admins to add passes to an existing balance", async () => {
+      const { membership } = await seedMembership({
+        clubId,
+        guestPassesTotal: 10,
+        guestPassesUsed: 0,
+        persons: [{ firstName: "Shyam", lastName: "Vivekanandan", email: "shyam@example.com" }]
+      });
+
+      const response = await authPost(`/api/v1/members/memberships/${membership.id}/passes/adjust`, adminToken, {
+        quantity: 5,
+        reason: "comp"
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.guestPassesTotal).toBe(15);
+      await expect(prisma.membership.findUniqueOrThrow({ where: { id: membership.id } })).resolves.toMatchObject({
+        guestPassesTotal: 15
+      });
+    });
+
+    it("allows admins to remove passes when total stays above used", async () => {
+      const { membership } = await seedMembership({
+        clubId,
+        guestPassesTotal: 10,
+        guestPassesUsed: 5,
+        persons: [{ firstName: "Shyam", lastName: "Vivekanandan", email: "shyam@example.com" }]
+      });
+
+      const response = await authPost(`/api/v1/members/memberships/${membership.id}/passes/adjust`, adminToken, {
+        quantity: -3,
+        reason: "error_fix"
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.guestPassesTotal).toBe(7);
+      await expect(prisma.membership.findUniqueOrThrow({ where: { id: membership.id } })).resolves.toMatchObject({
+        guestPassesTotal: 7
+      });
+    });
+
+    it("rejects removing passes below the used count", async () => {
+      const { membership } = await seedMembership({
+        clubId,
+        guestPassesTotal: 10,
+        guestPassesUsed: 5,
+        persons: [{ firstName: "Shyam", lastName: "Vivekanandan", email: "shyam@example.com" }]
+      });
+
+      const response = await authPost(`/api/v1/members/memberships/${membership.id}/passes/adjust`, adminToken, {
+        quantity: -6,
+        reason: "error_fix"
+      });
+
+      expect(response.status).toBe(409);
+      expect(response.body.error.code).toBe("INSUFFICIENT_PASSES");
+      await expect(prisma.membership.findUniqueOrThrow({ where: { id: membership.id } })).resolves.toMatchObject({
+        guestPassesTotal: 10
+      });
+    });
+
+    it("rejects staff role adjustments", async () => {
+      const { membership } = await seedMembership({
+        clubId,
+        guestPassesTotal: 0,
+        guestPassesUsed: 0,
+        persons: [{ firstName: "Shyam", lastName: "Vivekanandan", email: "shyam@example.com" }]
+      });
+
+      const response = await authPost(`/api/v1/members/memberships/${membership.id}/passes/adjust`, staffToken, {
+        quantity: 10,
+        reason: "purchase"
+      });
+
+      expect(response.status).toBe(403);
+      expect(response.body.error.code).toBe("ADMIN_REQUIRED");
+    });
+
+    it("logs guest pass adjustments with reason and notes", async () => {
+      const { membership } = await seedMembership({
+        clubId,
+        guestPassesTotal: 10,
+        guestPassesUsed: 5,
+        persons: [{ firstName: "Shyam", lastName: "Vivekanandan", email: "shyam@example.com" }]
+      });
+
+      const response = await authPost(`/api/v1/members/memberships/${membership.id}/passes/adjust`, adminToken, {
+        quantity: 5,
+        reason: "purchase",
+        notes: "Gate payment"
+      });
+
+      expect(response.status).toBe(200);
+      const log = await prisma.memberEditLog.findFirstOrThrow({ where: { targetType: "guest_passes_adjust" } });
+      expect(log).toMatchObject({
+        clubId,
+        membershipId: membership.id,
+        targetLabel: "Shyam Vivekanandan"
+      });
+      expect(log.changes).toEqual({
+        guestPassesTotal: { from: "10", to: "15" },
+        reason: "purchase",
+        notes: "Gate payment"
+      });
+    });
   });
 
   describe("add person to membership", () => {

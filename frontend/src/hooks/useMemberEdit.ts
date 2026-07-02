@@ -6,7 +6,10 @@ import {
   patchEmergency,
   patchPerson,
   postAddPerson,
+  postAdjustGuestPasses,
   type AddPersonResponse,
+  type GuestPassAdjustmentReason,
+  type GuestPassAdjustmentResponse,
   type MemberDetailFamilyMember,
   type MemberDetailResponse
 } from "../lib/api";
@@ -226,6 +229,27 @@ export const useAddPerson = (membershipId: string | undefined, detailPersonId: s
     },
     onError: () => {
       toast.error("Couldn't add the member");
+    },
+    onSettled: async () => {
+      await invalidate();
+    }
+  });
+};
+
+export const useAdjustGuestPasses = (membershipId: string | undefined, detailPersonId: string | null) => {
+  const invalidate = useInvalidateMemberData(detailPersonId);
+
+  return useMutation<
+    GuestPassAdjustmentResponse,
+    unknown,
+    { quantity: number; reason: GuestPassAdjustmentReason; notes?: string }
+  >({
+    mutationFn: (body) => {
+      if (!membershipId) {
+        throw new Error("membershipId is required");
+      }
+
+      return postAdjustGuestPasses(membershipId, body);
     },
     onSettled: async () => {
       await invalidate();

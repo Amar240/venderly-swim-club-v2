@@ -24,6 +24,16 @@ const todayInputValue = (): string => {
 const formatChangeValue = (value: string | null): string =>
   value && value.trim().length > 0 ? value : "—";
 
+const REASON_LABELS: Record<string, string> = {
+  purchase: "Manual purchase",
+  comp: "Complimentary passes",
+  error_fix: "Error correction",
+  other: "Other"
+};
+
+const isFieldChange = (value: unknown): value is { from: string | null; to: string | null } =>
+  typeof value === "object" && value !== null && "from" in value && "to" in value;
+
 const formatFieldName = (field: string): string =>
   field
     .replace(/([A-Z])/g, " $1")
@@ -33,7 +43,24 @@ const formatFieldName = (field: string): string =>
 const formatEditAction = (targetType: string): string => {
   if (targetType === "person_remove") return "Removed";
   if (targetType === "person_add") return "Added";
+  if (targetType === "guest_passes_adjust") return "Adjusted passes";
   return "Edited";
+};
+
+const formatGuestPassAdjustment = (changes: Record<string, unknown>): string | null => {
+  const totalChange = changes.guestPassesTotal;
+
+  if (!isFieldChange(totalChange)) {
+    return null;
+  }
+
+  const from = Number.parseInt(totalChange.from ?? "0", 10);
+  const to = Number.parseInt(totalChange.to ?? "0", 10);
+  const delta = to - from;
+  const reason = typeof changes.reason === "string" ? REASON_LABELS[changes.reason] ?? changes.reason : null;
+  const notes = typeof changes.notes === "string" && changes.notes.trim().length > 0 ? changes.notes.trim() : null;
+
+  return [`${delta > 0 ? "+" : ""}${delta} passes`, reason, notes].filter(Boolean).join(" · ");
 };
 
 export const AdminActivity = () => {
@@ -209,7 +236,9 @@ export const AdminActivity = () => {
                             ? "bg-brand-danger text-white"
                             : event.targetType === "person_add"
                               ? "bg-brand-success text-white"
-                              : "bg-brand-primary text-white"
+                              : event.targetType === "guest_passes_adjust"
+                                ? "bg-brand-warning text-brand-navy"
+                                : "bg-brand-primary text-white"
                         }
                       >
                         {formatEditAction(event.targetType)}
@@ -218,12 +247,20 @@ export const AdminActivity = () => {
                     <TableCell>{event.targetLabel}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-2">
-                        {Object.entries(event.changes).map(([field, change]) => (
-                          <Badge key={field} variant="outline" className="border-brand-border text-slate-700">
-                            {formatFieldName(field)}: {formatChangeValue(change.from)} →{" "}
-                            {formatChangeValue(change.to)}
+                        {event.targetType === "guest_passes_adjust" ? (
+                          <Badge variant="outline" className="border-brand-border text-slate-700">
+                            {formatGuestPassAdjustment(event.changes) ?? "Guest passes adjusted"}
                           </Badge>
-                        ))}
+                        ) : (
+                          Object.entries(event.changes).map(([field, change]) =>
+                            isFieldChange(change) ? (
+                              <Badge key={field} variant="outline" className="border-brand-border text-slate-700">
+                                {formatFieldName(field)}: {formatChangeValue(change.from)} →{" "}
+                                {formatChangeValue(change.to)}
+                              </Badge>
+                            ) : null
+                          )
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

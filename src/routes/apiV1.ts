@@ -3,8 +3,10 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { getNewYorkTodayBounds } from "../lib/timezone";
 import { HttpError } from "../middleware/errorHandler";
+import { adminAuth } from "../middleware/adminAuth";
 import { jwtAuth, type StaffResponse } from "../middleware/jwtAuth";
 import {
+  adjustGuestPasses,
   addPersonToMembership,
   deletePerson,
   updateMembershipAddress,
@@ -265,6 +267,7 @@ membersRouter.delete("/persons/:id", deletePerson);
 membersRouter.post("/memberships/:membershipId/persons", addPersonToMembership);
 membersRouter.patch("/memberships/:id/address", updateMembershipAddress);
 membersRouter.patch("/memberships/:id/emergency", updateMembershipEmergency);
+membersRouter.post("/memberships/:id/passes/adjust", adminAuth, adjustGuestPasses);
 
 membersRouter.get("/:id", async (req, res, next) => {
   try {
