@@ -59,6 +59,7 @@ describe("splitFullName", () => {
   });
 
   it("handles single names and trims whitespace", () => {
+    expect(splitFullName("Elsa")).toEqual({ firstName: "Elsa", lastName: "" });
     expect(splitFullName("Madonna")).toEqual({ firstName: "Madonna", lastName: "" });
     expect(splitFullName("  Tyler  ")).toEqual({ firstName: "Tyler", lastName: "" });
   });

@@ -108,6 +108,19 @@ describe("POST /webhooks/ghl/signup (integration)", () => {
     expect(persons.every((person) => person.emergencyContactEmail === null)).toBe(true);
   });
 
+  it("allows signup payloads without last_name and stores an empty last name", async () => {
+    const payload = buildSignupPayload({ first_name: "Elsa" });
+    delete payload.last_name;
+
+    const response = await postSignup(payload);
+
+    expect(response.status).toBe(200);
+
+    const primary = await prisma.person.findFirstOrThrow({ where: { isPrimary: true } });
+    expect(primary.firstName).toBe("Elsa");
+    expect(primary.lastName).toBe("");
+  });
+
   it("re-firing the same contact_id updates the membership instead of duplicating", async () => {
     const first = await postSignup(buildSignupPayload());
     expect(first.status).toBe(200);

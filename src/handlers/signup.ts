@@ -38,7 +38,7 @@ const signupSchema = z
       .passthrough(),
     contact_id: z.string().min(1),
     first_name: z.string().min(1),
-    last_name: z.string().min(1),
+    last_name: z.string().optional().default(""),
     email: z.string().trim().email(),
     phone: z.string().optional(),
     triggerData: z.record(z.unknown()).optional(),
@@ -313,7 +313,7 @@ export const signupHandler: RequestHandler = async (req, res, next) => {
       throw new HttpError(422, "CLUB_NOT_FOUND", "No active club matches the GHL location id");
     }
 
-    const accountHolderFullName = `${input.first_name} ${input.last_name}`;
+    const accountHolderFullName = `${input.first_name} ${input.last_name}`.trim();
     const familyMembers = parseFamilyMembers(input, accountHolderFullName);
     const membershipTier = resolveMembershipTier(input);
     const now = new Date();
