@@ -228,3 +228,32 @@ model MemberEditLog {
   @@index([clubId, createdAt])
   @@map("member_edit_logs")
 }
+
+model Prospect {
+  id          String   @id @default(uuid())
+  clubName    String   @map("club_name")
+  contactName String   @map("contact_name")
+  email       String
+  source      String   @default("demo")
+  clubId      String?  @map("club_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("prospects")
+}
+
+model IngestionJob {
+  id             String   @id @default(uuid())
+  clubId         String   @map("club_id")
+  rawFilename    String   @map("raw_filename")
+  detectedFormat String   @map("detected_format")
+  rowCount       Int      @map("row_count")
+  status         String
+  warnings       Json
+  droppedColumns Json     @map("dropped_columns")
+  error          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([clubId])
+  @@map("ingestion_jobs")
+}

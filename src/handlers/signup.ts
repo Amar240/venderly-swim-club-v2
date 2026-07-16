@@ -170,7 +170,9 @@ const parsePaymentAmountDollars = (value: unknown): number | undefined => {
   return parsed >= 1000 ? parsed / 100 : parsed;
 };
 
-const parseMembershipTierFromPaymentAmount = (amountDollars: number | undefined): MembershipTier | undefined => {
+export const parseMembershipTierFromPaymentAmount = (
+  amountDollars: number | undefined
+): MembershipTier | undefined => {
   if (amountDollars === undefined) {
     return undefined;
   }

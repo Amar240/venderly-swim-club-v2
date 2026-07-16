@@ -16,6 +16,7 @@ import {
 import { adminRouter } from "./admin";
 import { authRouter } from "./auth";
 import { dashboardRouter } from "./dashboard";
+import { demoRouter } from "./demo";
 import { reportsRouter } from "./reports";
 
 const listMembersQuerySchema = z.object({
@@ -88,6 +89,7 @@ apiV1Router.get("/health", (_req, res) => {
 
 apiV1Router.use("/auth", authRouter);
 apiV1Router.use("/dashboard", dashboardRouter);
+apiV1Router.use("/demo", demoRouter);
 apiV1Router.use("/admin", adminRouter);
 apiV1Router.use("/reports", reportsRouter);
 apiV1Router.use("/members", membersRouter);
