@@ -1,5 +1,5 @@
 import { inferMapping } from "./mapping";
-import { parseCsv } from "./parse";
+import { parseCsv, parseXlsx } from "./parse";
 import { profileColumns } from "./profile";
 import type { ScalarTargetField } from "./synonyms";
 import {
@@ -101,8 +101,7 @@ const validateMembership = (
   return null;
 };
 
-export const ingestCsv = (text: string): IngestResult => {
-  const { headers, rows } = parseCsv(text);
+export const ingestTable = (headers: string[], rows: string[][]): IngestResult => {
   const profiles = profileColumns(headers, rows);
   const mapping = inferMapping(headers, rows, profiles);
   const records = toRecords(headers, rows);
@@ -173,4 +172,33 @@ export const ingestCsv = (text: string): IngestResult => {
     droppedColumns: mapping.droppedColumns,
     warnings
   };
+};
+
+export const ingestCsv = (text: string): IngestResult => {
+  const { headers, rows } = parseCsv(text);
+  return ingestTable(headers, rows);
+};
+
+export const ingestFile = (input: Buffer | string, filename: string): IngestResult => {
+  const extension = filename.toLowerCase().split(".").pop() ?? "";
+
+  if (extension === "csv") {
+    const text = Buffer.isBuffer(input) ? input.toString("utf8") : input;
+    return ingestCsv(text);
+  }
+
+  if (extension === "xlsx" || extension === "xls") {
+    if (!Buffer.isBuffer(input)) {
+      throw new Error("Excel ingestion requires a file buffer.");
+    }
+
+    const { headers, rows } = parseXlsx(input);
+    return ingestTable(headers, rows);
+  }
+
+  if (extension === "numbers") {
+    throw new Error("Apple Numbers files are not supported. Please export the spreadsheet to Excel (.xlsx) or CSV.");
+  }
+
+  throw new Error("Unsupported file type. Please upload a CSV or Excel (.xlsx/.xls) file.");
 };
