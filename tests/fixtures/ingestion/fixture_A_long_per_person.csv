@@ -1,0 +1,140 @@
+household_id,member_name,age,phone,email,is_primary,plan_size,amount_paid,signup_date
+H1000,Caleb Lewis,,13025911540,caleb.lewis.0001@example.com,yes,2,240,"Jul 6th 2026, 11:52 pm"
+H1000,Kevin Lewis,67,3025911540,,no,,,
+H1000,Ethan Lewis,11,,,no,,,
+H1001,Isabella Johnson,,13026742095,isabella.johnson.0002@example.com,yes,3,290,"Jul 9th 2026, 5:14 am"
+H1001,Abigail Green,69,3026742095,,no,,,
+H1001,Willow Johnson,32,3025536347,,no,,,
+H1001,John Washington,29,3027766136,,no,,,
+H1002,Lucy Robinson,,13024860333,lucy.robinson.0003@example.com,yes,4,290,"Jul 5th 2026, 10:11 am"
+H1002,Christopher Collins,40,3024860333,,no,,,
+H1002,Alexa Cox,33,3023498193,,no,,,
+H1002,Kevin Sanchez,5,,,no,,,
+H1002,Violet Robinson,65,3024188591,,no,,,
+H1003,Gary Williams,,13028669885,gary.williams.0004@example.com,yes,4,290,"Jul 6th 2026, 11:19 am"
+H1003,Karen Williams,35,3028669885,,no,,,
+H1003,Christian Williams,43,,,no,,,
+H1003,Nicholas Miller,56,,,no,,,
+H1003,Hazel Williams,36,,,no,,,
+H1004,Alyssa Brooks,,13026902708,alyssa.brooks.0005@example.com,yes,3,290,"Jul 15th 2026, 3:37 am"
+H1004,Anthony Washington,20,3026902708,,no,,,
+H1004,Anthony Brooks,9,,,no,,,
+H1004,Angela Hall,60,,,no,,,
+H1005,Robert Bennett,,13023913735,robert.bennett.0006@example.com,yes,2,240,"Jul 5th 2026, 5:34 am"
+H1005,Carolyn Bennett,49,3023913735,,no,,,
+H1005,Logan Bennett,79,3025507790,,no,,,
+H1006,Patrick Brooks,,13026192725,patrick.brooks.0007@example.com,yes,4,290,"Jul 12th 2026, 10:38 am"
+H1006,Kayla Brooks,51,3026192725,,no,,,
+H1006,Richard James,21,,,no,,,
+H1006,Harper Hernandez,26,3026089002,,no,,,
+H1006,Christopher Torres,38,3024760559,,no,,,
+H1007,Samuel Davis,,13029878626,samuel.davis.0008@example.com,yes,2,240,"Jul 3rd 2026, 8:43 pm"
+H1007,Xavier Davis,67,3029878626,,no,,,
+H1007,Oliver Davis,68,3029955965,,no,,,
+H1008,Alex Allen,,13025180840,alex.allen.0009@example.com,yes,1,165,"Jul 8th 2026, 1:55 pm"
+H1008,Violet Allen,18,3025180840,,no,,,
+H1009,Savannah Edwards,,13022313554,savannah.edwards.0010@example.com,yes,2,240,"Jul 10th 2026, 11:39 am"
+H1009,Sarah Edwards,70,3022313554,,no,,,
+H1009,Connor Edwards,48,3024796380,,no,,,
+H1010,Logan Nelson,,13025850824,logan.nelson.0011@example.com,yes,4,290,"Jul 9th 2026, 10:11 am"
+H1010,Alex Nelson,71,3025850824,,no,,,
+H1010,Kimberly Sanchez,42,,,no,,,
+H1010,Caleb Nelson,62,,,no,,,
+H1010,Ethan Perez,74,3023952029,,no,,,
+H1011,Levi Stewart,,13027761562,levi.stewart.0012@example.com,yes,1,165,"Jul 14th 2026, 5:06 am"
+H1011,Hailey Stewart,62,3027761562,,no,,,
+H1012,Sophie Brooks,,13023099554,sophie.brooks.0013@example.com,yes,2,240,"Jul 12th 2026, 2:32 am"
+H1012,Mason Brooks,59,3023099554,,no,,,
+H1012,Richard Brooks,15,,,no,,,
+H1013,Ian Bryant,,13026426482,ian.bryant.0014@example.com,yes,2,240,"Jul 2nd 2026, 7:44 pm"
+H1013,Tyler Morgan,73,3026426482,,no,,,
+H1013,Ethan Bryant,76,3027358246,,no,,,
+H1014,Austin Brown,,13023055367,austin.brown.0015@example.com,yes,4,290,"Jul 12th 2026, 11:06 am"
+H1014,Sebastian Brown,54,3023055367,,no,,,
+H1014,Brittany Brown,5,,,no,,,
+H1014,Elias Bryant,15,,,no,,,
+H1014,Layla Campbell,73,3024908117,,no,,,
+H1015,Hailey Jackson,,13023696553,hailey.jackson.0016@example.com,yes,3,290,"Jul 3rd 2026, 12:21 pm"
+H1015,Hannah Allen,62,3023696553,,no,,,
+H1015,Evelyn Jackson,15,,,no,,,
+H1015,Ethan Morgan,51,3023243820,,no,,,
+H1016,Aubrey Moore,,13027422120,aubrey.moore.0017@example.com,yes,1,165,"Jul 15th 2026, 1:45 pm"
+H1016,Michelle Stewart,56,3027422120,,no,,,
+H1017,Alexander Martin,,13028966555,alexander.martin.0018@example.com,yes,2,240,"Jul 11th 2026, 9:32 pm"
+H1017,Alexa Martin,62,3028966555,,no,,,
+H1017,Oliver Martin,11,,,no,,,
+H1018,Elias Long,,13024422852,elias.long.0019@example.com,yes,2,240,"Jul 3rd 2026, 7:03 am"
+H1018,Sarah Long,39,3024422852,,no,,,
+H1018,Aria Long,14,,,no,,,
+H1019,Ethan Bennett,,13029148405,ethan.bennett.0020@example.com,yes,2,240,"Jul 5th 2026, 10:42 am"
+H1019,Karen Cruz,33,3029148405,,no,,,
+H1019,Riley Bennett,6,,,no,,,
+H1020,Brianna Thomas,,13029834362,brianna.thomas.0021@example.com,yes,2,240,"Jul 13th 2026, 12:08 pm"
+H1020,Amelia Thomas,74,3029834362,,no,,,
+H1020,Donna Thomas,17,,,no,,,
+H1021,Julian Henderson,,13028747496,julian.henderson.0022@example.com,yes,4,290,"Jul 9th 2026, 10:12 am"
+H1021,Isabella Henderson,68,3028747496,,no,,,
+H1021,Julia Henderson,56,,,no,,,
+H1021,Charlotte Hughes,10,,,no,,,
+H1021,Jennifer Henderson,18,,,no,,,
+H1022,Joshua Jones,,13028895106,joshua.jones.0023@example.com,yes,2,240,"Jul 2nd 2026, 3:27 am"
+H1022,Willow Jones,24,3028895106,,no,,,
+H1022,Jayden Ward,80,,,no,,,
+H1023,Ella Murphy,,13026481684,ella.murphy.0024@example.com,yes,4,290,"Jul 15th 2026, 1:08 pm"
+H1023,Rachel Edwards,56,3026481684,,no,,,
+H1023,Joshua Murphy,36,3024083488,,no,,,
+H1023,Jonathan Murphy,40,,,no,,,
+H1023,Jordan Garcia,71,3023022827,,no,,,
+H1024,Dominic Fisher,,13024985517,dominic.fisher.0025@example.com,yes,1,165,"Jul 11th 2026, 2:42 am"
+H1024,Austin Fisher,25,3024985517,,no,,,
+H1025,Riley Morgan,,13023225296,riley.morgan.0026@example.com,yes,1,165,"Jul 1st 2026, 10:14 am"
+H1025,Hazel Morgan,56,3023225296,,no,,,
+H1026,Anthony Simmons,,13029775693,anthony.simmons.0027@example.com,yes,1,165,"Jul 7th 2026, 5:52 pm"
+H1026,John Patterson,73,3029775693,,no,,,
+H1027,Alyssa Roberts,,13029102375,alyssa.roberts.0028@example.com,yes,3,290,"Jul 15th 2026, 9:59 pm"
+H1027,Luke Roberts,27,3029102375,,no,,,
+H1027,Daniel Garcia,73,3025657660,,no,,,
+H1027,Mila Taylor,64,3025475759,,no,,,
+H1028,Alice Hughes,,13025638166,alice.hughes.0029@example.com,yes,4,290,"Jul 1st 2026, 3:45 am"
+H1028,Charles Green,31,3025638166,,no,,,
+H1028,Hazel Hughes,34,,,no,,,
+H1028,Amelia Hughes,6,,,no,,,
+H1028,Jayden Brown,83,,,no,,,
+H1029,Audrey Martin,,13025126207,audrey.martin.0030@example.com,yes,2,240,"Jul 7th 2026, 8:18 pm"
+H1029,Alex Sanchez,49,3025126207,,no,,,
+H1029,Lucas Martin,67,,,no,,,
+H1030,Jayden Washington,,13028913841,jayden.washington.0031@example.com,yes,2,240,"Jul 15th 2026, 5:51 am"
+H1030,Richard Washington,60,3028913841,,no,,,
+H1030,Henry Washington,62,3025874346,,no,,,
+H1031,Caleb Jenkins,,13024501093,caleb.jenkins.0032@example.com,yes,4,290,"Jul 12th 2026, 4:34 am"
+H1031,Brian Jenkins,55,3024501093,,no,,,
+H1031,Gary Jenkins,51,,,no,,,
+H1031,Charles Jenkins,43,3029888523,,no,,,
+H1031,Logan Jenkins,40,,,no,,,
+H1032,Deborah Hill,,13026957074,deborah.hill.0033@example.com,yes,1,165,"Jul 9th 2026, 11:26 am"
+H1032,Abigail Hill,56,3026957074,,no,,,
+H1033,Evelyn Anderson,,13026643165,evelyn.anderson.0034@example.com,yes,4,290,"Jul 14th 2026, 10:11 am"
+H1033,Amelia Anderson,54,3026643165,,no,,,
+H1033,Jasmine Anderson,20,,,no,,,
+H1033,Brianna Anderson,64,3029534942,,no,,,
+H1033,Anna Anderson,48,,,no,,,
+H1034,Michelle Rivera,,13028183063,michelle.rivera.0035@example.com,yes,1,165,"Jul 12th 2026, 12:06 pm"
+H1034,Jonathan Rivera,36,3028183063,,no,,,
+H1035,Henry Lewis,,13025077137,henry.lewis.0036@example.com,yes,1,165,"Jul 1st 2026, 4:15 am"
+H1035,Hudson Martin,35,3025077137,,no,,,
+H1036,Michelle Alexander,,13023478386,michelle.alexander.0037@example.com,yes,4,290,"Jul 6th 2026, 10:13 am"
+H1036,Hailey Alexander,19,3023478386,,no,,,
+H1036,Audrey Alexander,13,,,no,,,
+H1036,Audrey Adams,53,,,no,,,
+H1036,Brittany Edwards,8,,,no,,,
+H1037,Andrew Cruz,,13023871461,andrew.cruz.0038@example.com,yes,2,240,"Jul 14th 2026, 7:49 pm"
+H1037,Ella Moore,20,3023871461,,no,,,
+H1037,Ryan Cruz,70,,,no,,,
+H1038,Robert Adams,,13024193109,robert.adams.0039@example.com,yes,2,240,"Jul 5th 2026, 10:46 pm"
+H1038,Nicholas Jackson,27,3024193109,,no,,,
+H1038,Joshua Adams,13,,,no,,,
+H1039,Mateo Wright,,13026177736,mateo.wright.0040@example.com,yes,4,290,"Jul 2nd 2026, 8:16 pm"
+H1039,Joshua Wright,56,3026177736,,no,,,
+H1039,Connor Wright,31,,,no,,,
+H1039,Brittany Wright,8,,,no,,,
+H1039,Angela Rivera,6,,,no,,,
