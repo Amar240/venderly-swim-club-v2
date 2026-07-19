@@ -14,6 +14,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
+import { SplashBrand } from "../components/SplashBrand";
 
 const BOOKING_URL = "https://secure.venderly.us/widget/booking/GhQmK64lJqAj3TBFaMq9";
 
@@ -53,17 +54,6 @@ type OverviewState =
 
 const fullName = (person: DemoPerson): string => `${person.firstName} ${person.lastName}`.trim();
 
-const BrandLink = () => (
-  <Link className="vld-brand-link" to="/" aria-label="Venderly Aquatics home">
-    <span className="vld-brandmark">
-      <span className="vld-drop" aria-hidden="true" />
-      <span>
-        Venderly <span className="vld-brand-accent">Aquatics</span>
-      </span>
-    </span>
-  </Link>
-);
-
 export const DemoDashboard = () => {
   const { clubId = "" } = useParams<{ clubId: string }>();
   const [state, setState] = useState<OverviewState>({ status: "loading" });
@@ -71,7 +61,7 @@ export const DemoDashboard = () => {
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = "Your Club Dashboard | Venderly Aquatics";
+    document.title = "Your Club Dashboard | Splash Manager";
     const controller = new AbortController();
 
     const load = async (): Promise<void> => {
@@ -80,7 +70,7 @@ export const DemoDashboard = () => {
           signal: controller.signal
         });
         setState({ status: "success", overview: response.data });
-        document.title = `${response.data.club.name} | Venderly Aquatics Demo`;
+        document.title = `${response.data.club.name} | Splash Manager Demo`;
       } catch (error) {
         if (axios.isCancel(error)) {
           return;
@@ -120,7 +110,7 @@ export const DemoDashboard = () => {
     <div className="vld vld-dashboard-page">
       <div className="vld-grid-bg" aria-hidden="true" />
       <main className="vld-dashboard-main">
-        <BrandLink />
+        <SplashBrand />
 
         {state.status === "loading" ? (
           <section className="vld-overview-state" aria-live="polite">

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Splash Manager, swim club and pool management by Venderly</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#071320; --ink-2:#0b1e30; --ink-3:#102941;
+    --aqua:#1fd0d6; --cyan:#3ee0ff; --teal-deep:#0e8f9c;
+    --coral:#ff7a67;
+    --text:#eaf5f9; --muted:#8ea8b9; --line:rgba(255,255,255,.09);
+    --glass:rgba(255,255,255,.045);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:Inter,system-ui,sans-serif;color:var(--text);background:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+  h1,h2,h3,.brandmark{font-family:"Space Grotesk",Inter,sans-serif;letter-spacing:-.02em}
+  a{color:inherit;text-decoration:none}
+  .grad{background:linear-gradient(103deg,var(--aqua),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .btn{display:inline-flex;align-items:center;gap:9px;font-weight:600;font-size:15px;padding:14px 24px;border-radius:12px;border:1px solid transparent;cursor:pointer;transition:.22s}
+  .btn-primary{background:linear-gradient(103deg,var(--aqua),var(--cyan));color:#04222a;box-shadow:0 10px 34px -10px rgba(62,224,255,.55)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 16px 44px -10px rgba(62,224,255,.7)}
+  .btn-ghost{background:var(--glass);border:1px solid var(--line);color:var(--text)}
+  .btn-ghost:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.22)}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--aqua);background:rgba(31,208,214,.1);border:1px solid rgba(31,208,214,.24);padding:7px 14px;border-radius:100px}
+  nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);background:rgba(7,19,32,.72);border-bottom:1px solid var(--line)}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:70px}
+  .brandmark{display:flex;align-items:center;gap:10px;font-weight:700;font-size:19px}
+  .drop{width:26px;height:26px;border-radius:8px 8px 12px 3px;background:linear-gradient(150deg,var(--aqua),var(--cyan));transform:rotate(45deg);box-shadow:0 4px 16px -4px rgba(62,224,255,.6)}
+  .navlinks{display:flex;gap:28px;font-size:15px;color:var(--muted);font-weight:500}
+  .navlinks a:hover{color:var(--text)}
+  .navcta{display:flex;gap:12px;align-items:center}
+  @media(max-width:860px){.navlinks{display:none}.navcta .btn-ghost{display:none}}
+  .hero{position:relative;padding:88px 0 64px;overflow:hidden}
+  .glow{position:absolute;border-radius:50%;filter:blur(90px);opacity:.55;z-index:0;pointer-events:none}
+  .glow-a{width:620px;height:620px;background:radial-gradient(circle,rgba(31,208,214,.5),transparent 62%);top:-230px;right:-160px}
+  .glow-b{width:520px;height:520px;background:radial-gradient(circle,rgba(62,224,255,.3),transparent 60%);bottom:-260px;left:-160px}
+  .grid-bg{position:absolute;inset:0;z-index:0;opacity:.4;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:54px 54px;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 40%,transparent 80%)}
+  .herogrid{position:relative;z-index:2;display:grid;grid-template-columns:1.05fr .95fr;gap:52px;align-items:center}
+  @media(max-width:900px){.herogrid{grid-template-columns:1fr;gap:40px}}
+  h1{font-size:clamp(36px,5vw,58px);line-height:1.05;font-weight:700;margin:22px 0}
+  .lede{font-size:18.5px;color:var(--muted);max-width:540px;margin-bottom:28px}
+  .lede b{color:var(--text);font-weight:600}
+  .cta-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:24px}
+  .microtrust{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--muted)}
+  .microtrust .dot{width:7px;height:7px;border-radius:50%;background:var(--coral);box-shadow:0 0 0 4px rgba(255,122,103,.18);animation:pulse 2.4s infinite}
+  @keyframes pulse{50%{box-shadow:0 0 0 8px rgba(255,122,103,0)}}
+  .dash{position:relative;background:linear-gradient(165deg,rgba(16,41,65,.9),rgba(11,30,48,.9));border:1px solid var(--line);border-radius:22px;padding:20px;box-shadow:0 40px 90px -30px rgba(0,0,0,.7)}
+  .dash-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+  .dash-top small{color:var(--muted);font-size:12.5px}
+  .live{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--aqua);background:rgba(31,208,214,.1);padding:5px 11px;border-radius:100px;border:1px solid rgba(31,208,214,.2)}
+  .live i{width:7px;height:7px;border-radius:50%;background:var(--aqua);animation:pulse2 1.8s infinite}
+  @keyframes pulse2{50%{opacity:.35}}
+  .cap{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:14px}
+  .capnum{display:flex;align-items:baseline;gap:8px}
+  .capnum b{font-family:"Space Grotesk";font-size:34px;font-weight:700}
+  .capnum span{color:var(--muted);font-size:14px}
+  .bar{height:9px;border-radius:100px;background:rgba(255,255,255,.08);margin-top:12px;overflow:hidden}
+  .bar>i{display:block;height:100%;width:35%;border-radius:100px;background:linear-gradient(90deg,var(--aqua),var(--cyan));animation:fill 2s ease-out}
+  @keyframes fill{from{width:0}}
+  .rows{display:flex;flex-direction:column;gap:9px}
+  .row{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:12px;padding:10px 13px}
+  .av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:#04222a;background:linear-gradient(140deg,var(--aqua),var(--cyan));flex-shrink:0}
+  .row .nm{font-size:14px;font-weight:600}
+  .row .mt{font-size:12px;color:var(--muted)}
+  .row .in{margin-left:auto;font-size:11.5px;font-weight:600;color:#7ef0c8;background:rgba(46,197,140,.12);padding:4px 10px;border-radius:100px}
+  .trust{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:24px 0;margin-top:34px}
+  .trust .wrap{display:flex;align-items:center;justify-content:center;gap:12px 30px;flex-wrap:wrap;color:var(--muted);font-size:14px}
+  .chip{font-family:"Space Grotesk";font-weight:600;color:var(--text);opacity:.75;font-size:16px}
+  section.blk{padding:88px 0;position:relative}
+  .stitle{text-align:center;max-width:660px;margin:0 auto 52px}
+  .stitle h2{font-size:clamp(27px,3.5vw,40px);font-weight:700;line-height:1.12;margin-bottom:15px}
+  .stitle p{color:var(--muted);font-size:17px}
+  .kicker{font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--aqua);margin-bottom:13px}
+  .cards3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  @media(max-width:860px){.cards3{grid-template-columns:1fr}}
+  .pain{background:var(--glass);border:1px solid var(--line);border-radius:16px;padding:26px}
+  .pain .ic{font-size:26px;margin-bottom:14px}
+  .pain h3{font-size:18px;font-weight:600;margin-bottom:8px}
+  .pain p{font-size:14.5px;color:var(--muted)}
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  @media(max-width:900px){.steps{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){.steps{grid-template-columns:1fr}}
+  .step{background:var(--glass);border:1px solid var(--line);border-radius:16px;padding:24px 22px;transition:.25s}
+  .step:hover{transform:translateY(-4px);border-color:rgba(31,208,214,.35);background:rgba(31,208,214,.05)}
+  .stepn{font-family:"Space Grotesk";font-size:13px;font-weight:700;color:var(--aqua);letter-spacing:.1em}
+  .stepic{width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;margin:16px 0 14px;background:rgba(31,208,214,.1);border:1px solid rgba(31,208,214,.22);font-size:22px}
+  .step h3{font-size:17px;font-weight:600;margin-bottom:8px}
+  .step p{font-size:14px;color:var(--muted)}
+  .feats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  @media(max-width:960px){.feats{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:560px){.feats{grid-template-columns:1fr}}
+  .feat{background:linear-gradient(165deg,rgba(16,41,65,.55),rgba(11,30,48,.4));border:1px solid var(--line);border-radius:16px;padding:22px;transition:.25s}
+  .feat:hover{border-color:rgba(62,224,255,.32);transform:translateY(-3px)}
+  .feat.hl{border-color:rgba(31,208,214,.4);background:rgba(31,208,214,.06)}
+  .feat .ic{font-size:23px;margin-bottom:12px;display:block}
+  .feat h3{font-size:16px;font-weight:600;margin-bottom:7px}
+  .feat p{font-size:13.5px;color:var(--muted)}
+  .feat .tag{display:inline-block;margin-top:10px;font-size:11px;font-weight:600;color:var(--aqua);background:rgba(31,208,214,.1);padding:3px 9px;border-radius:100px}
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:760px){.compare{grid-template-columns:1fr}}
+  .col{border-radius:18px;padding:28px}
+  .col.bad{background:rgba(255,255,255,.02);border:1px solid var(--line)}
+  .col.good{background:rgba(31,208,214,.06);border:1px solid rgba(31,208,214,.32)}
+  .col h3{font-size:19px;font-weight:600;margin-bottom:18px;display:flex;align-items:center;gap:10px}
+  .col .mark{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700}
+  .bad .mark{background:rgba(255,122,103,.15);color:var(--coral)}
+  .good .mark{background:linear-gradient(140deg,var(--aqua),var(--cyan));color:#04222a}
+  .col li{list-style:none;font-size:14.5px;color:var(--muted);padding:9px 0;border-bottom:1px solid var(--line)}
+  .col li:last-child{border-bottom:none}
+  .col.good li{color:var(--text)}
+  .col .result{margin-top:16px;font-weight:600;font-size:15px}
+  .bad .result{color:var(--coral)}
+  .good .result{color:var(--aqua)}
+  .who{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+  .who span{background:var(--glass);border:1px solid var(--line);border-radius:100px;padding:11px 22px;font-size:15px;font-weight:500}
+  .sec{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  @media(max-width:860px){.sec{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:480px){.sec{grid-template-columns:1fr}}
+  .secitem{padding:22px;background:var(--glass);border:1px solid var(--line);border-radius:14px}
+  .secitem .ic{font-size:22px;margin-bottom:10px}
+  .secitem h3{font-size:15.5px;font-weight:600;margin-bottom:6px}
+  .secitem p{font-size:13.5px;color:var(--muted)}
+  .final{position:relative;text-align:center;padding:104px 0;overflow:hidden}
+  .final .glow-c{width:760px;height:520px;background:radial-gradient(circle,rgba(31,208,214,.28),transparent 62%);filter:blur(90px);position:absolute;top:-120px;left:50%;transform:translateX(-50%);z-index:0}
+  .final .inner{position:relative;z-index:2}
+  .final h2{font-size:clamp(30px,4.2vw,50px);font-weight:700;line-height:1.08;margin-bottom:18px;max-width:720px;margin-inline:auto}
+  .final p{color:var(--muted);font-size:18px;margin-bottom:32px;max-width:560px;margin-inline:auto}
+  footer{border-top:1px solid var(--line);padding:40px 0}
+  .foot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;color:var(--muted);font-size:14px}
+  .foot .tagline{max-width:360px}
+  .reveal{opacity:0;transform:translateY(22px);transition:.7s cubic-bezier(.2,.7,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav">
+    <div class="brandmark"><span class="drop"></span> Splash <span style="color:var(--aqua);font-weight:600">Manager</span></div>
+    <div class="navlinks">
+      <a href="#how">How it works</a>
+      <a href="#features">Platform</a>
+      <a href="#who">Who it's for</a>
+    </div>
+    <div class="navcta">
+      <a class="btn btn-ghost" href="https://secure.venderly.us/widget/booking/ezwySaqXb5XSli2nSsGe" target="_blank" rel="noopener">Book a demo</a>
+      <a class="btn btn-primary" href="#demo">See your club live →</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="glow glow-a"></div>
+  <div class="glow glow-b"></div>
+  <div class="grid-bg"></div>
+  <div class="wrap herogrid">
+    <div>
+      <span class="eyebrow">Swim club &amp; pool management, by Venderly</span>
+      <h1>See your swim club running.<br><span class="grad">In two minutes, not two weeks.</span></h1>
+      <p class="lede">Upload the member spreadsheet you already have. Splash Manager reads it and builds your club automatically, so you are looking at <b>your own members, families, and guest passes</b> in minutes. No setup project. No waiting for the season to start.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#demo">See your club live →</a>
+        <a class="btn btn-ghost" href="https://secure.venderly.us/widget/booking/ezwySaqXb5XSli2nSsGe" target="_blank" rel="noopener">Book a demo</a>
+      </div>
+      <div class="microtrust"><span class="dot"></span> Try it with the member file you already have. No account needed.</div>
+    </div>
+    <div class="dash">
+      <div class="dash-top">
+        <div><div style="font-weight:600;font-size:15px">Community Swim Club</div><small>Saturday · 2:41 PM</small></div>
+        <span class="live"><i></i> Live</span>
+      </div>
+      <div class="cap">
+        <div style="color:var(--muted);font-size:12.5px;margin-bottom:2px">In the pool now</div>
+        <div class="capnum"><b>42</b><span>/ 120 capacity</span></div>
+        <div class="bar"><i></i></div>
+      </div>
+      <div class="rows">
+        <div class="row"><div class="av">CL</div><div><div class="nm">Caleb Lewis</div><div class="mt">Family · 3 members</div></div><span class="in">Checked in</span></div>
+        <div class="row"><div class="av">IJ</div><div><div class="nm">Isabella Johnson</div><div class="mt">Family · 4 members</div></div><span class="in">Checked in</span></div>
+        <div class="row"><div class="av">LR</div><div><div class="nm">Lucy Robinson</div><div class="mt">Guest pass · 2 left</div></div><span class="in">Checked in</span></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="trust">
+  <div class="wrap">
+    <span>Swim clubs already run on Venderly:</span>
+    <span class="chip">Wedgewood Swim Club</span>
+    <span class="chip">Graylyn Crest Swim Club</span>
+    <span>and more.</span>
+  </div>
+</div>
+
+<section class="blk">
+  <div class="stitle reveal">
+    <div class="kicker">The everyday reality</div>
+    <h2>Most pool teams are doing too much by hand</h2>
+    <p>Binders, spreadsheets, paper passes, and one-off apps. Splash Manager brings the everyday pieces together so the season feels easier to run.</p>
+  </div>
+  <div class="cards3">
+    <div class="pain reveal"><div class="ic">📋</div><h3>The gate slows everyone down</h3><p>Front-desk staff hunt for accounts, confirm status, and check guest passes while the line backs up on a busy Saturday.</p></div>
+    <div class="pain reveal"><div class="ic">⚡</div><h3>Revenue leaks when tools are scattered</h3><p>Memberships, guest passes, parties, and merch are hard to grow when they live across five different tools.</p></div>
+    <div class="pain reveal"><div class="ic">👥</div><h3>Nobody sees the full member story</h3><p>Families renew, visit, bring guests, and ask questions. It should all live in one place, not five.</p></div>
+  </div>
+</section>
+
+<section class="blk" id="how" style="background:linear-gradient(180deg,transparent,rgba(16,41,65,.35),transparent)">
+  <div class="stitle reveal">
+    <div class="kicker">See it in two minutes</div>
+    <h2>From your spreadsheet to your live club</h2>
+    <p>Other tools take one to two weeks and a setup team. Splash Manager shows you your own club, today.</p>
+  </div>
+  <div class="steps">
+    <div class="step reveal"><div class="stepn">STEP 01</div><div class="stepic">📄</div><h3>Upload your member file</h3><p>Drop in the list you already keep, CSV or Excel. Any column layout, however messy it looks.</p></div>
+    <div class="step reveal"><div class="stepn">STEP 02</div><div class="stepic">✨</div><h3>It reads your columns</h3><p>Splash Manager works out which column is which automatically, so you never have to reformat your spreadsheet first.</p></div>
+    <div class="step reveal"><div class="stepn">STEP 03</div><div class="stepic">📊</div><h3>See your club, built</h3><p>Browse your real memberships, families, and guest passes in a live dashboard made from your own file.</p></div>
+    <div class="step reveal"><div class="stepn">STEP 04</div><div class="stepic">🚀</div><h3>Make it real</h3><p>Like what you see? Book a walkthrough and we will get your club set up on Splash Manager for the season.</p></div>
+  </div>
+</section>
+
+<section class="blk" id="features">
+  <div class="stitle reveal">
+    <div class="kicker">The platform</div>
+    <h2>Everything to run the season, in one place</h2>
+    <p>Practical tools for members, the front desk, payments, programs, communication, and reporting.</p>
+  </div>
+  <div class="feats">
+    <div class="feat reveal"><span class="ic">👨‍👩‍👧</span><h3>Family memberships</h3><p>Households, members, renewals, and status, organized from the start.</p></div>
+    <div class="feat reveal"><span class="ic">✅</span><h3>QR &amp; tap check-in</h3><p>Scan passes and confirm access in seconds, even when the gate is slammed.</p></div>
+    <div class="feat reveal"><span class="ic">🎟️</span><h3>Guest passes</h3><p>Sell and track guest access without paper cards or end-of-day guesswork.</p></div>
+    <div class="feat reveal"><span class="ic">💳</span><h3>Events &amp; payments</h3><p>Collect for memberships, parties, lessons, and events in one clean flow.</p></div>
+    <div class="feat reveal"><span class="ic">👥</span><h3>Member CRM</h3><p>Families, guests, notes, and history connected in one shared view.</p></div>
+    <div class="feat reveal hl"><span class="ic">🤖</span><h3>Ask your data</h3><p>Ask plain questions like "which memberships expire next month?" and get answers from your own records.</p><span class="tag">AI insights</span></div>
+    <div class="feat reveal"><span class="ic">👕</span><h3>Club merch</h3><p>Sell branded gear with no inventory, boxes, or shipping headaches.</p></div>
+    <div class="feat reveal"><span class="ic">📊</span><h3>Clear reporting</h3><p>Give your board a clean picture of what happened and what needs attention.</p></div>
+  </div>
+</section>
+
+<section class="blk" style="background:linear-gradient(180deg,transparent,rgba(16,41,65,.35),transparent)">
+  <div class="stitle reveal">
+    <div class="kicker">One system, not five</div>
+    <h2>Why run the pool through five different tools?</h2>
+  </div>
+  <div class="compare">
+    <div class="col bad reveal">
+      <h3><span class="mark">✕</span> The usual scramble</h3>
+      <ul>
+        <li>Memberships in a spreadsheet</li>
+        <li>Check-ins in a binder or basic app</li>
+        <li>Guest passes on paper logs</li>
+        <li>Payments in a separate processor</li>
+        <li>Events in one-off forms</li>
+        <li>Messages in yet another tool</li>
+      </ul>
+      <div class="result">The team feels: endless double-entry.</div>
+    </div>
+    <div class="col good reveal">
+      <h3><span class="mark">✓</span> With Splash Manager</h3>
+      <ul>
+        <li>Memberships, check-ins, and passes together</li>
+        <li>Payments, events, and lessons in one flow</li>
+        <li>Member messages and history connected</li>
+        <li>Merch and reporting built in</li>
+        <li>Answers from your own club data</li>
+        <li>One login for the whole club</li>
+      </ul>
+      <div class="result">The result: one system, more revenue.</div>
+    </div>
+  </div>
+</section>
+
+<section class="blk" id="who">
+  <div class="stitle reveal">
+    <div class="kicker">Made for</div>
+    <h2>The groups that keep summer running</h2>
+  </div>
+  <div class="who">
+    <span class="reveal">Community swim clubs</span>
+    <span class="reveal">HOA neighborhood pools</span>
+    <span class="reveal">Recreation centers</span>
+    <span class="reveal">Aquatic associations</span>
+  </div>
+</section>
+
+<section class="blk" style="background:linear-gradient(180deg,transparent,rgba(16,41,65,.35),transparent)">
+  <div class="stitle reveal">
+    <div class="kicker">Built to keep things in order</div>
+    <h2>Real members, real money, kept organized</h2>
+    <p>Your pool handles real member information and real money. Splash Manager keeps access, activity, and records clear as the club grows.</p>
+  </div>
+  <div class="sec">
+    <div class="secitem reveal"><div class="ic">🔐</div><h3>Role-based access</h3><p>Managers, front desk, board, and coaches each get the right level.</p></div>
+    <div class="secitem reveal"><div class="ic">💳</div><h3>Secure payments</h3><p>For memberships, passes, events, lessons, and merch.</p></div>
+    <div class="secitem reveal"><div class="ic">🛡️</div><h3>Your data stays yours</h3><p>Member and payment data stays under your club's account. No reselling.</p></div>
+    <div class="secitem reveal"><div class="ic">📜</div><h3>Activity history</h3><p>Every check-in, pass, payment, and change, tracked.</p></div>
+  </div>
+</section>
+
+<section class="final" id="demo">
+  <div class="glow-c"></div>
+  <div class="wrap inner">
+    <div class="eyebrow reveal" style="margin-bottom:22px">Get out of the spreadsheet</div>
+    <h2 class="reveal">See your own club running in minutes</h2>
+    <p class="reveal">Bring the member file you already have and watch your club get built in front of you. Or book a walkthrough and we will map your exact setup.</p>
+    <div class="cta-row reveal" style="justify-content:center">
+      <a class="btn btn-primary" href="#" onclick="return false">See your club live →</a>
+      <a class="btn btn-ghost" href="https://secure.venderly.us/widget/booking/ezwySaqXb5XSli2nSsGe" target="_blank" rel="noopener">Book a demo</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div class="brandmark" style="font-size:17px"><span class="drop" style="width:22px;height:22px"></span> Splash <span style="color:var(--aqua)">Manager</span></div>
+    <div class="tagline">Splash Manager by Venderly. The operating system for swim clubs and community pools.</div>
+    <div>© 2026 Venderly. All rights reserved.</div>
+  </div>
+</footer>
+
+<script>
+  const io=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{threshold:.12});
+  document.querySelectorAll('.reveal').forEach((el,i)=>{el.style.transitionDelay=(i%4*70)+'ms';io.observe(el)});
+</script>
+</body>
+</html>

@@ -1,19 +1,29 @@
 import {
+  BarChart3,
+  Bot,
+  Check,
+  ClipboardList,
+  ContactRound,
+  CreditCard,
   FileUp,
   LayoutDashboard,
+  LockKeyhole,
   Rocket,
   ScanLine,
+  ScrollText,
   ShieldCheck,
+  Shirt,
   Sparkles,
   Ticket,
-  TrendingUp,
   Users,
-  Waves,
+  X,
+  Zap,
   type LucideIcon
 } from "lucide-react";
 import { m, useReducedMotion } from "framer-motion";
 import { useEffect, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { SplashBrand } from "../components/SplashBrand";
 import "./landing.css";
 
 const BOOKING_URL = "https://secure.venderly.us/widget/booking/GhQmK64lJqAj3TBFaMq9";
@@ -33,56 +43,107 @@ type MarketingCard = {
 const steps: MarketingCard[] = [
   {
     icon: FileUp,
-    title: "Upload CSV or Excel",
-    description: "Use the member spreadsheet or system export you already have. Common club layouts are recognized automatically."
+    title: "Upload your member file",
+    description: "Drop in the list you already keep, CSV or Excel. Any column layout, however messy it looks."
   },
   {
     icon: Sparkles,
-    title: "We map it for you",
-    description: "Our deterministic importer recognizes common member, household, tier, and guest-pass columns."
+    title: "It reads your columns",
+    description: "Splash Manager works out which column is which automatically, so you never have to reformat your spreadsheet first."
   },
   {
     icon: LayoutDashboard,
-    title: "Explore your club, live",
-    description: "Your real members, families, and guest passes inside a working dashboard you can click through."
+    title: "See your club, built",
+    description: "Browse your real memberships, families, and guest passes in a live dashboard made from your own file."
   },
   {
     icon: Rocket,
-    title: "Plan your launch",
-    description: "Like what you see? Book a walkthrough and we will help move your club into a production workspace."
+    title: "Make it real",
+    description: "Like what you see? Book a walkthrough and we will get your club set up on Splash Manager for the season."
   }
 ];
 
 const features: MarketingCard[] = [
   {
-    icon: Waves,
-    title: "Real-time pool capacity",
-    description: "See exactly who's in the pool right now, with live counts that refresh across every device at the gate."
+    icon: Users,
+    title: "Family memberships",
+    description: "Households, members, renewals, and status, organized from the start."
   },
   {
     icon: ScanLine,
-    title: "Tap & QR check-in",
-    description: "Members check in with a tap or a scan. Seconds per family, even with a line out the door."
-  },
-  {
-    icon: Users,
-    title: "Family memberships",
-    description: "Every member, including kids, spouses, and grandparents, checks in independently. No more shared logins."
+    title: "QR & tap check-in",
+    description: "Scan passes and confirm access in seconds, even when the gate is slammed."
   },
   {
     icon: Ticket,
     title: "Guest passes",
-    description: "Track guest passes automatically as they're used, with balances the front desk can trust."
+    description: "Sell and track guest access without paper cards or end-of-day guesswork."
   },
   {
-    icon: TrendingUp,
-    title: "Reports that matter",
-    description: "Peak days, attendance trends, and who hasn't visited. The numbers your board actually asks for."
+    icon: CreditCard,
+    title: "Events & payments",
+    description: "Collect for memberships, parties, lessons, and events in one clean flow."
+  },
+  {
+    icon: ContactRound,
+    title: "Member CRM",
+    description: "Families, guests, notes, and history connected in one shared view."
+  },
+  {
+    icon: Bot,
+    title: "Ask your data",
+    description: "Ask plain questions like \"which memberships expire next month?\" and get answers from your own records."
+  },
+  {
+    icon: Shirt,
+    title: "Club merch",
+    description: "Sell branded gear with no inventory, boxes, or shipping headaches."
+  },
+  {
+    icon: BarChart3,
+    title: "Clear reporting",
+    description: "Give your board a clean picture of what happened and what needs attention."
+  }
+];
+
+const painPoints: MarketingCard[] = [
+  {
+    icon: ClipboardList,
+    title: "The gate slows everyone down",
+    description: "Front-desk staff hunt for accounts, confirm status, and check guest passes while the line backs up on a busy Saturday."
+  },
+  {
+    icon: Zap,
+    title: "Revenue leaks when tools are scattered",
+    description: "Memberships, guest passes, parties, and merch are hard to grow when they live across five different tools."
+  },
+  {
+    icon: ContactRound,
+    title: "Nobody sees the full member story",
+    description: "Families renew, visit, bring guests, and ask questions. It should all live in one place, not five."
+  }
+];
+
+const securityPoints: MarketingCard[] = [
+  {
+    icon: LockKeyhole,
+    title: "Role-based access",
+    description: "Managers, front desk, board, and coaches each get the right level."
+  },
+  {
+    icon: CreditCard,
+    title: "Secure payments",
+    description: "For memberships, passes, events, lessons, and merch."
   },
   {
     icon: ShieldCheck,
-    title: "Your data, your control",
-    description: "Powered by Venderly's secure infrastructure. No data reselling, ever. It stays yours."
+    title: "Your data stays yours",
+    description: "Member and payment data stays under your club's account. No reselling."
+  },
+  {
+    icon: ScrollText,
+    title: "Activity history",
+    description: "Every check-in, pass, payment, and change, tracked."
   }
 ];
 
@@ -102,15 +163,6 @@ const Reveal = ({ children, className = "", delay = 0 }: RevealProps) => {
   );
 };
 
-const Brand = ({ compact = false }: { compact?: boolean }) => (
-  <span className={`vld-brandmark${compact ? " vld-brandmark-compact" : ""}`}>
-    <span className="vld-drop" aria-hidden="true" />
-    <span>
-      Venderly <span className="vld-brand-accent">Aquatics</span>
-    </span>
-  </span>
-);
-
 const WaterMotion = ({ subtle = false }: { subtle?: boolean }) => (
   <div className={`vld-water-motion${subtle ? " vld-water-motion-subtle" : ""}`} aria-hidden="true">
     <span className="vld-water-shimmer" />
@@ -125,7 +177,7 @@ const DashboardMock = () => (
   <div className="vld-dash" aria-label="Example live swim club dashboard">
     <div className="vld-dash-top">
       <div>
-        <div className="vld-dash-club">Wedgewood Swim Club</div>
+        <div className="vld-dash-club">Community Swim Club</div>
         <small>Saturday · 2:41 PM</small>
       </div>
       <span className="vld-live">
@@ -164,7 +216,7 @@ const DashboardMock = () => (
 export const Landing = () => {
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = "Venderly Aquatics | The operating system for swim clubs";
+    document.title = "Splash Manager | Swim club and pool management by Venderly";
     return () => {
       document.title = previousTitle;
     };
@@ -174,12 +226,11 @@ export const Landing = () => {
     <div className="vld">
       <nav className="vld-site-nav" aria-label="Main navigation">
         <div className="vld-wrap vld-nav-inner">
-          <a href="#top" className="vld-brand-link" aria-label="Venderly Aquatics home">
-            <Brand />
-          </a>
+          <SplashBrand />
           <div className="vld-nav-links">
             <a href="#how">How it works</a>
-            <a href="#features">Features</a>
+            <a href="#features">Platform</a>
+            <a href="#who">Who it's for</a>
           </div>
           <div className="vld-nav-actions">
             <a
@@ -188,7 +239,7 @@ export const Landing = () => {
               target="_blank"
               rel="noopener noreferrer"
             >
-              Book a walkthrough
+              Book a demo
             </a>
             <Link className="vld-button vld-button-primary" to="/demo">
               See your club live <span aria-hidden="true">→</span>
@@ -201,27 +252,33 @@ export const Landing = () => {
         <WaterMotion />
         <div className="vld-wrap vld-hero-grid">
           <div className="vld-hero-copy">
-            <span className="vld-eyebrow">For swim & pool clubs</span>
+            <span className="vld-eyebrow">Swim club & pool management, by Venderly</span>
             <h1>
-              See your swim club
+              See your swim club running.
               <br />
-              <span className="vld-gradient-text">running in two minutes.</span>
+              <span className="vld-gradient-text">In two minutes, not two weeks.</span>
             </h1>
             <p className="vld-lede">
-              Upload a CSV or Excel member list from the system you already use. We turn recognized layouts into a{" "}
-              <b>live demo dashboard</b> on the spot. If your export needs help, our team can guide you.
+              Upload the member spreadsheet you already have. Splash Manager reads it and builds your club automatically,
+              so you are looking at <b>your own members, families, and guest passes</b> in minutes. No setup project. No
+              waiting for the season to start.
             </p>
             <div className="vld-cta-row">
               <Link className="vld-button vld-button-primary" to="/demo">
-                See your club in a live demo <span aria-hidden="true">→</span>
+                See your club live <span aria-hidden="true">→</span>
               </Link>
-              <a className="vld-button vld-button-ghost" href="#how">
-                How it works
+              <a
+                className="vld-button vld-button-ghost"
+                href={BOOKING_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Book a demo
               </a>
             </div>
             <div className="vld-microtrust">
               <span className="vld-status-dot" aria-hidden="true" />
-              No setup call. No account. Just your file and a working demo.
+              Try it with the member file you already have. No account needed.
             </div>
           </div>
           <DashboardMock />
@@ -230,20 +287,45 @@ export const Landing = () => {
 
       <div className="vld-trust">
         <div className="vld-wrap">
-          <span>Clubs already run on Venderly</span>
+          <span>Swim clubs already run on Venderly:</span>
           <span className="vld-trust-chip">Wedgewood Swim Club</span>
           <span className="vld-trust-chip">Graylyn Crest Swim Club</span>
-          <span>and growing.</span>
+          <span>and more.</span>
         </div>
       </div>
 
       <main>
+        <section className="vld-section">
+          <div className="vld-wrap">
+            <Reveal className="vld-section-title">
+              <div className="vld-kicker">The everyday reality</div>
+              <h2>Most pool teams are doing too much by hand</h2>
+              <p>
+                Binders, spreadsheets, paper passes, and one-off apps. Splash Manager brings the everyday pieces together
+                so the season feels easier to run.
+              </p>
+            </Reveal>
+            <div className="vld-pain-grid">
+              {painPoints.map((point, index) => {
+                const Icon = point.icon;
+                return (
+                  <Reveal className="vld-pain-card" delay={index * 0.07} key={point.title}>
+                    <Icon aria-hidden="true" />
+                    <h3>{point.title}</h3>
+                    <p>{point.description}</p>
+                  </Reveal>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
         <section className="vld-section" id="how">
           <div className="vld-wrap">
             <Reveal className="vld-section-title">
-              <div className="vld-kicker">How it works</div>
-              <h2>From a messy spreadsheet to a live club in one sitting</h2>
-              <p>No migration project. No IT. The demo is the setup.</p>
+              <div className="vld-kicker">See it in two minutes</div>
+              <h2>From your spreadsheet to your live club</h2>
+              <p>Other tools take one to two weeks and a setup team. Splash Manager shows you your own club, today.</p>
             </Reveal>
             <div className="vld-steps">
               {steps.map((step, index) => {
@@ -267,20 +349,22 @@ export const Landing = () => {
           <div className="vld-wrap">
             <Reveal className="vld-section-title">
               <div className="vld-kicker">The platform</div>
-              <h2>Everything a pool gate needs. Nothing it doesn't.</h2>
-              <p>
-                Built for the reality of a busy summer Saturday. It is fast, offline-tolerant, and simple enough for a
-                seasonal lifeguard.
-              </p>
+              <h2>Everything to run the season, in one place</h2>
+              <p>Practical tools for members, the front desk, payments, programs, communication, and reporting.</p>
             </Reveal>
             <div className="vld-features">
               {features.map((feature, index) => {
                 const Icon = feature.icon;
                 return (
-                  <Reveal className="vld-feature" delay={(index % 3) * 0.07} key={feature.title}>
+                  <Reveal
+                    className={`vld-feature${feature.title === "Ask your data" ? " vld-feature-highlight" : ""}`}
+                    delay={(index % 4) * 0.07}
+                    key={feature.title}
+                  >
                     <Icon className="vld-feature-icon" aria-hidden="true" />
                     <h3>{feature.title}</h3>
                     <p>{feature.description}</p>
+                    {feature.title === "Ask your data" ? <span className="vld-feature-tag">AI insights</span> : null}
                   </Reveal>
                 );
               })}
@@ -288,19 +372,84 @@ export const Landing = () => {
           </div>
         </section>
 
-        <section className="vld-section vld-stats-section" aria-label="Platform results">
+        <section className="vld-section vld-comparison-section">
           <div className="vld-wrap">
-            <div className="vld-stats">
-              {[
-                ["2 min", "from your file to a live demo"],
-                ["7 days", "to explore your private demo"],
-                ["0", "spreadsheets at the pool gate"]
-              ].map(([value, label], index) => (
-                <Reveal className="vld-stat" delay={index * 0.07} key={label}>
-                  <b className="vld-gradient-text">{value}</b>
-                  <span>{label}</span>
-                </Reveal>
-              ))}
+            <Reveal className="vld-section-title">
+              <div className="vld-kicker">One system, not five</div>
+              <h2>Why run the pool through five different tools?</h2>
+            </Reveal>
+            <div className="vld-comparison">
+              <Reveal className="vld-comparison-card vld-comparison-card-bad">
+                <h3>
+                  <span className="vld-comparison-mark"><X aria-hidden="true" /></span> The usual scramble
+                </h3>
+                <ul>
+                  <li>Memberships in a spreadsheet</li>
+                  <li>Check-ins in a binder or basic app</li>
+                  <li>Guest passes on paper logs</li>
+                  <li>Payments in a separate processor</li>
+                  <li>Events in one-off forms</li>
+                  <li>Messages in yet another tool</li>
+                </ul>
+                <div className="vld-comparison-result">The team feels: endless double-entry.</div>
+              </Reveal>
+              <Reveal className="vld-comparison-card vld-comparison-card-good" delay={0.07}>
+                <h3>
+                  <span className="vld-comparison-mark"><Check aria-hidden="true" /></span> With Splash Manager
+                </h3>
+                <ul>
+                  <li>Memberships, check-ins, and passes together</li>
+                  <li>Payments, events, and lessons in one flow</li>
+                  <li>Member messages and history connected</li>
+                  <li>Merch and reporting built in</li>
+                  <li>Answers from your own club data</li>
+                  <li>One login for the whole club</li>
+                </ul>
+                <div className="vld-comparison-result">The result: one system, more revenue.</div>
+              </Reveal>
+            </div>
+          </div>
+        </section>
+
+        <section className="vld-section" id="who">
+          <div className="vld-wrap">
+            <Reveal className="vld-section-title">
+              <div className="vld-kicker">Made for</div>
+              <h2>The groups that keep summer running</h2>
+            </Reveal>
+            <div className="vld-audiences">
+              {["Community swim clubs", "HOA neighborhood pools", "Recreation centers", "Aquatic associations"].map(
+                (audience, index) => (
+                  <Reveal className="vld-audience" delay={index * 0.06} key={audience}>
+                    {audience}
+                  </Reveal>
+                )
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className="vld-section vld-security-section">
+          <div className="vld-wrap">
+            <Reveal className="vld-section-title">
+              <div className="vld-kicker">Built to keep things in order</div>
+              <h2>Real members, real money, kept organized</h2>
+              <p>
+                Your pool handles real member information and real money. Splash Manager keeps access, activity, and
+                records clear as the club grows.
+              </p>
+            </Reveal>
+            <div className="vld-security-grid">
+              {securityPoints.map((point, index) => {
+                const Icon = point.icon;
+                return (
+                  <Reveal className="vld-security-card" delay={index * 0.07} key={point.title}>
+                    <Icon aria-hidden="true" />
+                    <h3>{point.title}</h3>
+                    <p>{point.description}</p>
+                  </Reveal>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -309,17 +458,20 @@ export const Landing = () => {
           <WaterMotion subtle />
           <div className="vld-wrap vld-final-inner">
             <Reveal>
-              <div className="vld-eyebrow vld-final-eyebrow">Ready when you are</div>
+              <div className="vld-eyebrow vld-final-eyebrow">Get out of the spreadsheet</div>
             </Reveal>
             <Reveal delay={0.07}>
-              <h2>Bring your member list. Leave with a live club.</h2>
+              <h2>See your own club running in minutes</h2>
             </Reveal>
             <Reveal delay={0.14}>
-              <p>Drop in the file you already have and watch your club come alive. No commitment and no setup call.</p>
+              <p>
+                Bring the member file you already have and watch your club get built in front of you. Or book a
+                walkthrough and we will map your exact setup.
+              </p>
             </Reveal>
             <Reveal className="vld-cta-row vld-final-actions" delay={0.21}>
               <Link className="vld-button vld-button-primary" to="/demo">
-                See your club in a live demo <span aria-hidden="true">→</span>
+                See your club live <span aria-hidden="true">→</span>
               </Link>
               <a
                 className="vld-button vld-button-ghost"
@@ -327,7 +479,7 @@ export const Landing = () => {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Book a 20-min walkthrough
+                Book a demo
               </a>
             </Reveal>
           </div>
@@ -336,9 +488,9 @@ export const Landing = () => {
 
       <footer className="vld-footer">
         <div className="vld-wrap vld-footer-inner">
-          <Brand compact />
+          <SplashBrand compact />
           <div className="vld-powered">
-            Powered by <b>Venderly</b>, the operating system for organizations that serve and scale.
+            Splash Manager by <b>Venderly</b>. The operating system for swim clubs and community pools.
           </div>
           <div>© 2026 Venderly. All rights reserved.</div>
         </div>

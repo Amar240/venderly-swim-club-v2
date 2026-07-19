@@ -14,6 +14,7 @@ import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 import { z } from "zod";
 import { api } from "../lib/api";
+import { SplashBrand } from "../components/SplashBrand";
 
 const BOOKING_URL = "https://secure.venderly.us/widget/booking/GhQmK64lJqAj3TBFaMq9";
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -87,17 +88,6 @@ const formatFileSize = (bytes: number): string => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const BrandLink = () => (
-  <Link className="vld-brand-link" to="/" aria-label="Venderly Aquatics home">
-    <span className="vld-brandmark">
-      <span className="vld-drop" aria-hidden="true" />
-      <span>
-        Venderly <span className="vld-brand-accent">Aquatics</span>
-      </span>
-    </span>
-  </Link>
-);
-
 export const Demo = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useState<DemoView>({ status: "start" });
@@ -120,7 +110,7 @@ export const Demo = () => {
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = "Live Demo | Venderly Aquatics";
+    document.title = "Live Demo | Splash Manager";
     return () => {
       document.title = previousTitle;
     };
@@ -238,7 +228,7 @@ export const Demo = () => {
     <div className="vld vld-demo-page">
       <div className="vld-grid-bg" aria-hidden="true" />
       <main className="vld-demo-main">
-        <BrandLink />
+        <SplashBrand />
         <AnimatePresence mode="wait" initial={false}>
           {view.status === "start" ? (
             <m.section
