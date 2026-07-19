@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+.DS_Store
+node_modules
+frontend/node_modules
+dist
+frontend/dist
+coverage
+tests
+v3_ingestion_fixtures
+*.log

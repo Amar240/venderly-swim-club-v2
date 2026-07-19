@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   FileSpreadsheet,
   Loader2,
+  Sparkles,
   Upload
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -40,7 +41,10 @@ type UploadResponse = {
   membershipsCreated: number;
   personsCreated: number;
   warnings: string[];
+  isSample?: boolean;
 };
+
+type DemoSource = "upload" | "sample";
 
 type ErrorEnvelope = {
   error?: {
@@ -52,8 +56,8 @@ type ErrorEnvelope = {
 
 type DemoView =
   | { status: "start" }
-  | { status: "loading" }
-  | { status: "success"; clubId: string; result: UploadResponse }
+  | { status: "loading"; source: DemoSource }
+  | { status: "success"; clubId: string; result: UploadResponse & { isSample: boolean } }
   | {
       status: "error";
       kind: "unprocessable" | "file" | "rate" | "generic";
@@ -138,23 +142,35 @@ export const Demo = () => {
     }
   };
 
-  const submit = async (values: DemoFormValues): Promise<void> => {
-    if (!selectedFile) {
+  const runDemo = async (values: DemoFormValues, source: DemoSource): Promise<void> => {
+    if (source === "upload" && !selectedFile) {
       setFileError("Choose your member spreadsheet to continue.");
       return;
     }
 
-    setView({ status: "loading" });
+    setView({ status: "loading", source });
 
     try {
       const start = await api.post<StartResponse>("/demo/start", values);
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-      const upload = await api.post<UploadResponse>(`/demo/${start.data.demoClubId}/upload`, formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
+      let result: UploadResponse;
 
-      setView({ status: "success", clubId: start.data.demoClubId, result: upload.data });
+      if (source === "sample") {
+        const sample = await api.post<UploadResponse>(`/demo/${start.data.demoClubId}/sample`);
+        result = sample.data;
+      } else {
+        const formData = new FormData();
+        formData.append("file", selectedFile!);
+        const upload = await api.post<UploadResponse>(`/demo/${start.data.demoClubId}/upload`, formData, {
+          headers: { "Content-Type": "multipart/form-data" }
+        });
+        result = upload.data;
+      }
+
+      setView({
+        status: "success",
+        clubId: start.data.demoClubId,
+        result: { ...result, isSample: source === "sample" }
+      });
     } catch (error) {
       if (axios.isAxiosError<ErrorEnvelope>(error)) {
         const status = error.response?.status;
@@ -217,6 +233,9 @@ export const Demo = () => {
     }
   };
 
+  const submitUpload = (values: DemoFormValues): Promise<void> => runDemo(values, "upload");
+  const submitSample = (values: DemoFormValues): Promise<void> => runDemo(values, "sample");
+
   const retry = (): void => {
     if (view.status === "error" && view.kind !== "generic") {
       clearFile();
@@ -243,7 +262,7 @@ export const Demo = () => {
               <h1>See your club come alive.</h1>
               <p>Tell us where to send your demo, then drop in the member list you already have.</p>
 
-              <form className="vld-demo-form" onSubmit={handleSubmit(submit)} noValidate>
+              <form className="vld-demo-form" onSubmit={handleSubmit(submitUpload)} noValidate>
                 <div className="vld-form-grid">
                   <label className="vld-field vld-field-wide">
                     <span>Club name</span>
@@ -326,8 +345,8 @@ export const Demo = () => {
                 <label className="vld-consent">
                   <input type="checkbox" {...register("authorized")} />
                   <span>
-                    I confirm I am authorized to upload this member list. The demo and its imported member data will
-                    be permanently deleted after seven days.
+                    I understand that any member list I upload must be authorized. The demo and its imported member
+                    data will be permanently deleted after seven days.
                   </span>
                 </label>
                 {errors.authorized ? (
@@ -338,6 +357,17 @@ export const Demo = () => {
                   See my club <span aria-hidden="true">→</span>
                 </button>
               </form>
+
+              <div className="vld-sample-option">
+                <span className="vld-sample-divider" aria-hidden="true">or</span>
+                <button
+                  className="vld-button vld-button-ghost vld-sample-button"
+                  type="button"
+                  onClick={() => void handleSubmit(submitSample)()}
+                >
+                  <Sparkles aria-hidden="true" /> No member list handy? Try it with sample data
+                </button>
+              </div>
 
               <a className="vld-guided-link" href={BOOKING_URL} target="_blank" rel="noopener noreferrer">
                 Prefer a guided tour? <span>Book a walkthrough</span>
@@ -361,8 +391,12 @@ export const Demo = () => {
               <div className="vld-state-icon vld-state-icon-loading">
                 <Loader2 aria-hidden="true" />
               </div>
-              <h1>Reading your members...</h1>
-              <p>We're organizing households, membership tiers, and guest-pass balances.</p>
+              <h1>{view.source === "sample" ? "Building your sample club..." : "Reading your members..."}</h1>
+              <p>
+                {view.source === "sample"
+                  ? "We're loading fictional households, membership tiers, and guest-pass balances."
+                  : "We're organizing households, membership tiers, and guest-pass balances."}
+              </p>
             </m.section>
           ) : null}
 
@@ -381,6 +415,11 @@ export const Demo = () => {
               </div>
               <h1>Your club is loaded.</h1>
               <p>Your private seven-day demo is ready. Contact details, addresses, and medical notes were not retained.</p>
+              {view.result.isSample ? (
+                <p className="vld-sample-note">
+                  This is sample data. Upload your own member file any time to see your real club.
+                </p>
+              ) : null}
               <div className="vld-result-stats">
                 <div>
                   <b>{view.result.membershipsCreated}</b>

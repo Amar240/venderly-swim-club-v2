@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Router } from "express";
 import multer from "multer";
 import { z } from "zod";
@@ -30,6 +32,8 @@ const HOUR_MS = 60 * 60 * 1000;
 const startRateLimit = createDemoRateLimit({ max: 20, windowMs: HOUR_MS });
 const uploadRateLimit = createDemoRateLimit({ max: 20, windowMs: HOUR_MS });
 const overviewRateLimit = createDemoRateLimit({ max: 120, windowMs: HOUR_MS });
+const SAMPLE_FILENAME = "sample-swim-club.csv";
+const SAMPLE_FILE_PATH = join(process.cwd(), "assets", "samples", SAMPLE_FILENAME);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_UPLOAD_BYTES }
@@ -74,6 +78,89 @@ const persistFailedJob = async (input: {
       message: error instanceof Error ? error.message : "Unknown error"
     });
   }
+};
+
+const assertUsableDemoClub = async (clubId: string): Promise<void> => {
+  const [club, prospect] = await Promise.all([
+    prisma.club.findUnique({ where: { id: clubId }, select: { id: true } }),
+    prisma.prospect.findFirst({
+      where: { clubId, expiresAt: { gt: new Date() } },
+      select: { id: true }
+    })
+  ]);
+
+  // Step 7 should add the not-provisioned condition here so every demo
+  // ingestion path receives the new gate from this single helper.
+  if (!club || !prospect) {
+    throw new HttpError(404, "DEMO_NOT_FOUND", "Demo club was not found or has expired");
+  }
+};
+
+const ingestAndLoadDemo = async (input: {
+  clubId: string;
+  buffer: Buffer;
+  filename: string;
+  detectedFormat: string;
+}): Promise<
+  | {
+      status: 200;
+      body: Awaited<ReturnType<typeof loadIngestResult>>;
+    }
+  | {
+      status: 422;
+      body: {
+        status: "error";
+        error: { code: "NO_VALID_MEMBERSHIPS"; message: string };
+        warnings: string[];
+      };
+    }
+> => {
+  let result: IngestResult;
+
+  try {
+    result = ingestFile(input.buffer, input.filename);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "The spreadsheet could not be parsed";
+    await persistFailedJob({
+      clubId: input.clubId,
+      filename: input.filename,
+      detectedFormat: input.detectedFormat,
+      error: message
+    });
+    throw new HttpError(400, "INGESTION_FAILED", message);
+  }
+
+  if (result.memberships.length === 0) {
+    const message = "The spreadsheet did not contain any valid memberships";
+    await persistFailedJob({
+      clubId: input.clubId,
+      filename: input.filename,
+      detectedFormat: input.detectedFormat,
+      error: message,
+      result
+    });
+    return {
+      status: 422,
+      body: {
+        status: "error",
+        error: { code: "NO_VALID_MEMBERSHIPS", message },
+        warnings: result.warnings.slice(0, 100)
+      }
+    };
+  }
+
+  return {
+    status: 200,
+    body: await loadIngestResult(
+      prisma,
+      {
+        clubId: input.clubId,
+        filename: input.filename,
+        detectedFormat: input.detectedFormat
+      },
+      result
+    )
+  };
 };
 
 export const demoRouter = Router();
@@ -225,17 +312,7 @@ demoRouter.post("/:clubId/upload", async (req, res, next) => {
       throw new HttpError(400, "FILE_REQUIRED", "A spreadsheet file is required");
     }
 
-    const [club, prospect] = await Promise.all([
-      prisma.club.findUnique({ where: { id: clubId }, select: { id: true } }),
-      prisma.prospect.findFirst({
-        where: { clubId, expiresAt: { gt: new Date() } },
-        select: { id: true }
-      })
-    ]);
-
-    if (!club || !prospect) {
-      throw new HttpError(404, "DEMO_NOT_FOUND", "Demo club was not found or has expired");
-    }
+    await assertUsableDemoClub(clubId);
 
     const detectedFormat = getExtension(file.originalname);
     const spreadsheetFormats = new Set(["csv", "xlsx", "xls"]);
@@ -244,45 +321,45 @@ demoRouter.post("/:clubId/upload", async (req, res, next) => {
       throw new HttpError(400, "UNSUPPORTED_FILE_TYPE", "Please upload a CSV or Excel spreadsheet");
     }
 
-    let result: IngestResult;
+    const outcome = await ingestAndLoadDemo({
+      clubId,
+      buffer: file.buffer,
+      filename: file.originalname,
+      detectedFormat
+    });
+    res.status(outcome.status).json(outcome.body);
+  } catch (error) {
+    next(error);
+  }
+});
 
+demoRouter.post("/:clubId/sample", uploadRateLimit, async (req, res, next) => {
+  try {
+    const { clubId } = clubParamsSchema.parse(req.params);
+    await assertUsableDemoClub(clubId);
+
+    let buffer: Buffer;
     try {
-      result = ingestFile(file.buffer, file.originalname);
+      buffer = readFileSync(SAMPLE_FILE_PATH);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "The spreadsheet could not be parsed";
-      await persistFailedJob({
-        clubId,
-        filename: file.originalname,
-        detectedFormat,
-        error: message
+      logger.error("Demo sample file is unavailable", {
+        path: SAMPLE_FILE_PATH,
+        message: error instanceof Error ? error.message : "Unknown file error"
       });
-      throw new HttpError(400, "INGESTION_FAILED", message);
+      throw new HttpError(
+        500,
+        "SAMPLE_FILE_UNAVAILABLE",
+        "The sample club is temporarily unavailable"
+      );
     }
 
-    if (result.memberships.length === 0) {
-      const message = "The spreadsheet did not contain any valid memberships";
-      await persistFailedJob({
-        clubId,
-        filename: file.originalname,
-        detectedFormat,
-        error: message,
-        result
-      });
-      res.status(422).json({
-        status: "error",
-        error: { code: "NO_VALID_MEMBERSHIPS", message },
-        warnings: result.warnings.slice(0, 100)
-      });
-      return;
-    }
-
-    const summary = await loadIngestResult(
-      prisma,
-      { clubId, filename: file.originalname, detectedFormat },
-      result
-    );
-
-    res.json(summary);
+    const outcome = await ingestAndLoadDemo({
+      clubId,
+      buffer,
+      filename: SAMPLE_FILENAME,
+      detectedFormat: "csv"
+    });
+    res.status(outcome.status).json({ ...outcome.body, isSample: true });
   } catch (error) {
     next(error);
   }

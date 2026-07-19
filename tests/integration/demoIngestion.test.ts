@@ -9,6 +9,7 @@ import { resetDb } from "../helpers/reset";
 import { cleanupExpiredDemos } from "../../src/lib/demoCleanup";
 
 const fixturePath = join(process.cwd(), "tests", "fixtures", "ingestion", "base_wedgewood_wide.csv");
+const samplePath = join(process.cwd(), "assets", "samples", "sample-swim-club.csv");
 
 const startDemo = async () => {
   const app = await getTestApp();
@@ -108,6 +109,46 @@ describe("demo ingestion (integration)", () => {
     });
   });
 
+  it("loads the built-in sample club through the normal ingestion path", async () => {
+    const app = await getTestApp();
+    const start = await startDemo();
+    const canonical = ingestCsv(readFileSync(samplePath, "utf8"));
+    const expectedPersons = canonical.memberships.reduce((sum, item) => sum + item.persons.length, 0);
+
+    const sample = await request(app)
+      .post(`/api/v1/demo/${start.body.demoClubId}/sample`)
+      .expect(200);
+
+    expect(sample.body).toMatchObject({
+      membershipsCreated: 45,
+      personsCreated: expectedPersons,
+      isSample: true
+    });
+
+    const overview = await request(app)
+      .get(`/api/v1/demo/${start.body.demoClubId}/overview`)
+      .expect(200);
+
+    expect(overview.body.summary).toMatchObject({
+      memberships: 45,
+      members: expectedPersons
+    });
+    expect(overview.body.memberships).toHaveLength(45);
+    expect(overview.body.memberships[0].persons[0]).toMatchObject({
+      firstName: "Caleb",
+      lastName: "Lewis",
+      isPrimary: true
+    });
+
+    const job = await prisma.ingestionJob.findUniqueOrThrow({ where: { id: sample.body.jobId } });
+    expect(job).toMatchObject({
+      rawFilename: "sample-swim-club.csv",
+      detectedFormat: "csv",
+      rowCount: 45,
+      status: "loaded"
+    });
+  });
+
   it("does not expose a non-demo club through the public overview", async () => {
     const app = await getTestApp();
     const club = await prisma.club.create({
@@ -118,6 +159,19 @@ describe("demo ingestion (integration)", () => {
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("DEMO_NOT_FOUND");
+  });
+
+  it("does not load sample data into a non-demo club", async () => {
+    const app = await getTestApp();
+    const club = await prisma.club.create({
+      data: { name: "Private Swim Club", slug: "private-sample-club" }
+    });
+
+    const response = await request(app).post(`/api/v1/demo/${club.id}/sample`);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("DEMO_NOT_FOUND");
+    expect(await prisma.membership.count({ where: { clubId: club.id } })).toBe(0);
   });
 
   it("rejects expired demo uploads and overviews", async () => {
@@ -132,6 +186,9 @@ describe("demo ingestion (integration)", () => {
     await request(app)
       .post(`/api/v1/demo/${start.body.demoClubId}/upload`)
       .attach("file", fixturePath)
+      .expect(404);
+    await request(app)
+      .post(`/api/v1/demo/${start.body.demoClubId}/sample`)
       .expect(404);
   });
 
