@@ -4,9 +4,11 @@ import { join } from "node:path";
 import { Router, type RequestHandler } from "express";
 import multer from "multer";
 import { z } from "zod";
+import { proposeMapping } from "../ingestion/aiMapper";
 import { analyzeIngestFile, ingestFile } from "../ingestion/normalize";
 import {
   EDITABLE_MAPPING_TARGETS,
+  mergeMappingSuggestions,
   type MappingOverride
 } from "../ingestion/mapping";
 import type { IngestResult } from "../ingestion/types";
@@ -360,8 +362,20 @@ demoRouter.post("/:clubId/preview", uploadRateLimit, receiveDemoFile, async (req
       throw new HttpError(400, "INGESTION_FAILED", message);
     }
 
+    const unresolvedColumns = analysis.mapping
+      .filter((entry) =>
+        entry.targetField === null &&
+        !entry.groupKey &&
+        !analysis.result.droppedColumns.includes(entry.sourceColumn)
+      )
+      .map((entry) => ({
+        sourceColumn: entry.sourceColumn,
+        sampleValues: entry.sampleValues
+      }));
+    const suggestions = await proposeMapping(unresolvedColumns);
+
     res.json({
-      mapping: analysis.mapping,
+      mapping: mergeMappingSuggestions(analysis.mapping, suggestions),
       droppedColumns: analysis.result.droppedColumns,
       stats: analysis.stats,
       sampleMemberships: analysis.result.memberships.slice(0, 3),

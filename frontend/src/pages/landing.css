@@ -1636,6 +1636,17 @@
   box-shadow: 0 0 0 3px rgb(31 208 214 / 0.16);
 }
 
+.vld .vld-editable-mapping {
+  display: grid;
+  gap: 6px;
+}
+
+.vld .vld-editable-mapping small {
+  color: var(--vld-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .vld .vld-ignored-mapping {
   color: var(--vld-muted);
   font-size: 12px;
@@ -1665,6 +1676,12 @@
   color: var(--vld-cyan);
   border-color: rgb(31 208 214 / 0.25);
   background: rgb(31 208 214 / 0.08);
+}
+
+.vld .vld-mapping-badge-llm {
+  color: var(--vld-cyan);
+  border-color: rgb(31 208 214 / 0.3);
+  background: rgb(31 208 214 / 0.1);
 }
 
 .vld .vld-family-toggle {

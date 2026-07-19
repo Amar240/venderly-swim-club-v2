@@ -1,6 +1,18 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../../src/ingestion/aiMapper", () => ({
+  proposeMapping: vi.fn(async (columns: Array<{ sourceColumn: string }>) =>
+    columns.some((column) => column.sourceColumn === "Complimentary Visitor Credits Remaining")
+      ? [{
+          sourceColumn: "Complimentary Visitor Credits Remaining",
+          targetField: "guestPasses",
+          confidence: 0.94
+        }]
+      : []
+  )
+}));
 import request from "supertest";
 import { ingestCsv } from "../../src/ingestion/normalize";
 import { prisma } from "../../src/lib/prisma";
@@ -143,6 +155,42 @@ describe("demo ingestion (integration)", () => {
       accountHolderName: "Ada Lovelace",
       guestPassesTotal: 7
     });
+  });
+
+  it("previews an AI suggestion and loads it through a confirmed override", async () => {
+    const app = await getTestApp();
+    const start = await startDemo();
+    const csv = [
+      "Your Full Name,Your Phone,Your Email,Select the # of Members for your Membership,Complimentary Visitor Credits Remaining",
+      "Ada Lovelace,3025551212,ada@example.com,1,7"
+    ].join("\n");
+
+    const preview = await request(app)
+      .post(`/api/v1/demo/${start.body.demoClubId}/preview`)
+      .attach("file", Buffer.from(csv), "ai-preview.csv")
+      .expect(200);
+    expect(preview.body.mapping).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceColumn: "Complimentary Visitor Credits Remaining",
+        targetField: "guestPasses",
+        method: "llm",
+        confidence: 0.94
+      })
+    ]));
+
+    await request(app)
+      .post(`/api/v1/demo/${start.body.demoClubId}/upload`)
+      .field("mappingOverrides", JSON.stringify([{
+        sourceColumn: "Complimentary Visitor Credits Remaining",
+        targetField: "guestPasses"
+      }]))
+      .attach("file", Buffer.from(csv), "ai-preview.csv")
+      .expect(200);
+
+    const overview = await request(app)
+      .get(`/api/v1/demo/${start.body.demoClubId}/overview`)
+      .expect(200);
+    expect(overview.body.memberships[0].guestPassesTotal).toBe(7);
   });
 
   it("returns a public overview for a loaded demo club", async () => {

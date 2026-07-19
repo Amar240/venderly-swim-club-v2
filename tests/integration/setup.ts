@@ -21,5 +21,6 @@ if (!/\/swimclub_test(\?|$)/.test(testUrl)) {
 
 // Point the app (Prisma) at the test database before any src module loads.
 process.env.DATABASE_URL = testUrl;
+process.env.AI_MAPPING_ENABLED = "false";
 process.env.WEBHOOK_SECRET = "test-webhook-secret";
 process.env.JWT_SECRET = "test-jwt-secret";

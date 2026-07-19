@@ -50,7 +50,13 @@ export type MappingOverride = {
   targetField: EditableMappingTarget | null;
 };
 
-export type MappingReviewMethod = "fuzzy" | "structural" | "manual";
+export type MappingReviewMethod = "fuzzy" | "structural" | "manual" | "llm";
+
+export type MappingSuggestion = {
+  sourceColumn: string;
+  targetField: ScalarTargetField | "ignore";
+  confidence: number;
+};
 
 export type MappingReviewEntry = {
   sourceColumn: string;
@@ -297,23 +303,21 @@ const isFamilySource = (plan: MappingPlan, sourceColumn: string): boolean => {
   return isWide || isLong || plan.combinedPeopleColumn === sourceColumn;
 };
 
-const isReadOnlyDetectedSource = (plan: MappingPlan, sourceColumn: string): boolean => {
-  const scalarTarget = scalarTargetForSource(plan, sourceColumn);
-
-  if (scalarTarget && !EDITABLE_MAPPING_TARGETS.includes(scalarTarget as EditableMappingTarget)) {
-    return true;
-  }
-
-  return Boolean(
-    plan.splitName && [plan.splitName.firstColumn, plan.splitName.lastColumn].includes(sourceColumn)
-  ) || plan.combinedAddressColumn === sourceColumn || plan.droppedColumns.includes(sourceColumn);
-};
-
 const removeScalarSource = (plan: MappingPlan, sourceColumn: string): void => {
   for (const [target, source] of Object.entries(plan.scalar) as Array<[ScalarTargetField, string]>) {
     if (source === sourceColumn) {
       delete plan.scalar[target];
     }
+  }
+};
+
+const disableNonFamilyStructure = (plan: MappingPlan, sourceColumn: string): void => {
+  if (plan.splitName && [plan.splitName.firstColumn, plan.splitName.lastColumn].includes(sourceColumn)) {
+    delete plan.splitName;
+  }
+
+  if (plan.combinedAddressColumn === sourceColumn) {
+    delete plan.combinedAddressColumn;
   }
 };
 
@@ -351,26 +355,14 @@ export const applyMappingOverrides = (
       throw new Error(`Unknown source column: ${override.sourceColumn}`);
     }
 
-    const originalScalarTarget = scalarTargetForSource(plan, override.sourceColumn);
-    const sourceIsEditableScalar = originalScalarTarget
-      ? EDITABLE_MAPPING_TARGETS.includes(originalScalarTarget as EditableMappingTarget)
-      : false;
     const sourceIsFamily = isFamilySource(plan, override.sourceColumn);
-    const sourceIsUnmapped = !originalScalarTarget && !sourceIsFamily && !isReadOnlyDetectedSource(plan, override.sourceColumn);
-
-    if (isReadOnlyDetectedSource(plan, override.sourceColumn)) {
-      throw new Error(`Column cannot be changed in the demo: ${override.sourceColumn}`);
-    }
 
     if (sourceIsFamily && override.targetField !== null) {
       throw new Error(`Family structure can only be included or ignored: ${override.sourceColumn}`);
     }
 
-    if (!sourceIsEditableScalar && !sourceIsFamily && !sourceIsUnmapped) {
-      throw new Error(`Column cannot be changed in the demo: ${override.sourceColumn}`);
-    }
-
     removeScalarSource(next, override.sourceColumn);
+    disableNonFamilyStructure(next, override.sourceColumn);
     next.droppedColumns = next.droppedColumns.filter((column) => column !== override.sourceColumn);
 
     if (sourceIsFamily) {
@@ -493,9 +485,7 @@ export const buildMappingReview = (
     const targetField = manualTarget !== undefined
       ? manualTarget
       : scalarTarget ?? structural?.targetField ?? null;
-    const editable = Boolean(
-      scalarTarget && EDITABLE_MAPPING_TARGETS.includes(scalarTarget as EditableMappingTarget)
-    ) || (!scalarTarget && !structural && !dropped);
+    const editable = !structural?.canToggleGroup;
 
     return {
       sourceColumn,
@@ -509,3 +499,46 @@ export const buildMappingReview = (
       ...(structural?.canToggleGroup !== undefined ? { canToggleGroup: structural.canToggleGroup } : {})
     };
   });
+
+export const mergeMappingSuggestions = (
+  mapping: MappingReviewEntry[],
+  suggestions: MappingSuggestion[]
+): MappingReviewEntry[] => {
+  const occupiedTargets = new Set(
+    mapping
+      .map((entry) => entry.targetField)
+      .filter((target): target is string => target !== null)
+  );
+  const suggestionBySource = new Map<string, MappingSuggestion>();
+
+  for (const suggestion of suggestions) {
+    if (suggestion.targetField !== "ignore" && occupiedTargets.has(suggestion.targetField)) {
+      continue;
+    }
+
+    const entry = mapping.find((item) => item.sourceColumn === suggestion.sourceColumn);
+    if (!entry || entry.targetField !== null || entry.groupKey) {
+      continue;
+    }
+
+    suggestionBySource.set(suggestion.sourceColumn, suggestion);
+    if (suggestion.targetField !== "ignore") {
+      occupiedTargets.add(suggestion.targetField);
+    }
+  }
+
+  return mapping.map((entry) => {
+    const suggestion = suggestionBySource.get(entry.sourceColumn);
+    if (!suggestion) {
+      return entry;
+    }
+
+    return {
+      ...entry,
+      targetField: suggestion.targetField === "ignore" ? null : suggestion.targetField,
+      confidence: suggestion.confidence,
+      method: "llm",
+      editable: true
+    };
+  });
+};

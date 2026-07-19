@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   applyMappingOverrides,
   buildMappingReview,
-  inferMapping
+  inferMapping,
+  mergeMappingSuggestions
 } from "../../src/ingestion/mapping";
 import { profileColumns } from "../../src/ingestion/profile";
 
@@ -66,16 +67,56 @@ describe("applyMappingOverrides", () => {
     expect(updated.wideMemberGroups).toEqual([]);
   });
 
-  it("rejects changes to detected fields that the demo does not store", () => {
-    expect(() => applyMappingOverrides(plan(), headers, [
+  it("allows a detected non-family field to be redirected or ignored", () => {
+    const ignored = applyMappingOverrides(plan(), headers, [
       { sourceColumn: "Your Email", targetField: null }
-    ])).toThrow("Column cannot be changed in the demo");
+    ]);
+    const redirected = applyMappingOverrides(plan(), headers, [
+      { sourceColumn: "Your Email", targetField: "guestPasses" }
+    ]);
+
+    expect(ignored.scalar.email).toBeUndefined();
+    expect(ignored.droppedColumns).toContain("Your Email");
+    expect(redirected.scalar.guestPasses).toBe("Your Email");
   });
 
   it("rejects source columns that are not present", () => {
     expect(() => applyMappingOverrides(plan(), headers, [
       { sourceColumn: "Missing Column", targetField: "guestPasses" }
     ])).toThrow("Unknown source column");
+  });
+});
+
+describe("mergeMappingSuggestions", () => {
+  it("marks unresolved suggestions as llm mappings", () => {
+    const review = buildMappingReview(headers, rows, plan()).map((entry) =>
+      entry.sourceColumn === "Guest Passes"
+        ? { ...entry, targetField: null, confidence: 0 }
+        : entry
+    );
+    const merged = mergeMappingSuggestions(review, [{
+      sourceColumn: "Mystery Balance",
+      targetField: "guestPasses",
+      confidence: 0.91
+    }]);
+
+    expect(merged.find((entry) => entry.sourceColumn === "Mystery Balance")).toMatchObject({
+      targetField: "guestPasses",
+      method: "llm",
+      confidence: 0.91,
+      editable: true
+    });
+  });
+
+  it("does not replace a deterministic target or structural mapping", () => {
+    const review = buildMappingReview(headers, rows, plan());
+    const merged = mergeMappingSuggestions(review, [
+      { sourceColumn: "Mystery Balance", targetField: "memberCount", confidence: 0.99 },
+      { sourceColumn: "1st Member Full Name", targetField: "guestPasses", confidence: 0.99 }
+    ]);
+
+    expect(merged.find((entry) => entry.sourceColumn === "Mystery Balance")?.targetField).toBeNull();
+    expect(merged.find((entry) => entry.sourceColumn === "1st Member Full Name")?.method).toBe("structural");
   });
 });
 

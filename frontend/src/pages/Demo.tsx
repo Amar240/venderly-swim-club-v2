@@ -48,7 +48,7 @@ type UploadResponse = {
 type DemoSource = "upload" | "sample";
 type EditableMappingTarget = "accountHolderName" | "memberCount" | "guestPasses" | "paymentAmount";
 
-type MappingMethod = "fuzzy" | "structural" | "manual";
+type MappingMethod = "fuzzy" | "structural" | "manual" | "llm";
 
 type MappingEntry = {
   sourceColumn: string;
@@ -190,7 +190,13 @@ type ReviewView = Extract<DemoView, { status: "review" }>;
 
 const MappingBadge = ({ method, changed = false }: { method: MappingMethod; changed?: boolean }) => (
   <span className={`vld-mapping-badge vld-mapping-badge-${changed ? "manual" : method}`}>
-    {changed ? "Manual" : method === "fuzzy" ? "Automatic" : "Structure"}
+    {changed
+      ? "Manual"
+      : method === "fuzzy"
+        ? "Automatic"
+        : method === "llm"
+          ? "AI suggested"
+          : "Structure"}
   </span>
 );
 
@@ -302,19 +308,24 @@ const MappingReview = ({
                   <td><SampleValues values={entry.sampleValues} /></td>
                   <td>
                     {entry.editable ? (
-                      <select
-                        value={selected ?? ""}
-                        aria-label={`Map ${entry.sourceColumn}`}
-                        onChange={(event) => onSelectionChange(
-                          entry.sourceColumn,
-                          event.target.value ? event.target.value as EditableMappingTarget : null
-                        )}
-                      >
-                        <option value="">Ignore this column</option>
-                        {EDITABLE_TARGET_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
+                      <div className="vld-editable-mapping">
+                        <select
+                          value={selected ?? ""}
+                          aria-label={`Map ${entry.sourceColumn}`}
+                          onChange={(event) => onSelectionChange(
+                            entry.sourceColumn,
+                            event.target.value ? event.target.value as EditableMappingTarget : null
+                          )}
+                        >
+                          <option value="">Ignore this column</option>
+                          {EDITABLE_TARGET_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                        {entry.method === "llm" && !isEditableTarget(entry.targetField) ? (
+                          <small>Detected as {TARGET_LABELS[entry.targetField ?? ""] ?? "a field"}, not stored in this demo</small>
+                        ) : null}
+                      </div>
                     ) : entry.targetField ? (
                       <div className="vld-readonly-mapping">
                         <b>{TARGET_LABELS[entry.targetField] ?? entry.groupLabel ?? "Detected field"}</b>
@@ -609,7 +620,9 @@ export const Demo = () => {
     for (const entry of review.preview.mapping) {
       if (entry.editable) {
         const selected = review.selections[entry.sourceColumn] ?? null;
-        const original = isEditableTarget(entry.targetField) ? entry.targetField : null;
+        const original = entry.method === "llm"
+          ? null
+          : isEditableTarget(entry.targetField) ? entry.targetField : null;
         if (selected !== original) {
           overrides.push({ sourceColumn: entry.sourceColumn, targetField: selected });
         }
