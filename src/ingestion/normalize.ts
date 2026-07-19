@@ -88,18 +88,18 @@ const buildBaseMembership = (
   row: RowRecord,
   scalar: Partial<Record<ScalarTargetField, string>>,
   accountHolderName: string
-): Omit<CanonicalMembership, "accountHolderName" | "email" | "phone" | "memberCount" | "persons"> & {
-  email: string;
-  phone: string;
+): Omit<CanonicalMembership, "accountHolderName" | "memberCount" | "persons"> & {
   memberCount: number;
 } => {
   const guestPasses = parseOptionalInteger(getScalar(row, scalar, "guestPasses"));
   const paymentAmount = parseOptionalNumber(getScalar(row, scalar, "paymentAmount"));
   const submittedAt = parseDateLoose(getScalar(row, scalar, "submittedAt"));
+  const email = textOrUndefined(getScalar(row, scalar, "email").toLowerCase());
+  const phone = textOrUndefined(coercePhone(getScalar(row, scalar, "phone")));
 
   return {
-    email: getScalar(row, scalar, "email").toLowerCase(),
-    phone: coercePhone(getScalar(row, scalar, "phone")),
+    ...(email ? { email } : {}),
+    ...(phone ? { phone } : {}),
     streetAddress: textOrUndefined(getScalar(row, scalar, "streetAddress")),
     city: textOrUndefined(getScalar(row, scalar, "city")),
     postalCode: textOrUndefined(coercePostal(getScalar(row, scalar, "postalCode"))),

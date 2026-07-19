@@ -153,7 +153,7 @@ export const dedupeHolderFromListedPeople = (
 
 export const withAccountHolderPerson = (
   accountHolderName: string,
-  holderPhone: string,
+  holderPhone: string | undefined,
   listedPeople: CanonicalPerson[]
 ): CanonicalPerson[] => {
   const holder = personFromName(accountHolderName, null, holderPhone, true);

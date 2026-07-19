@@ -98,6 +98,24 @@ describe("proposeMapping", () => {
 
     await expect(proposeMapping([{ sourceColumn: "Visitor Credits", sampleValues: ["12"] }])).resolves.toEqual([]);
     expect(bedrockMocks.send).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith("AI mapping skipped", {
+      outcome: "disabled",
+      configured: true,
+      columnCount: 1
+    });
+  });
+
+  it("records when there are no unresolved columns without calling Bedrock", async () => {
+    process.env.AI_MAPPING_ENABLED = "true";
+    process.env.BEDROCK_REGION = "us-east-2";
+    process.env.BEDROCK_MODEL_ID = "test-model";
+
+    await expect(proposeMapping([])).resolves.toEqual([]);
+    expect(bedrockMocks.send).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith("AI mapping skipped", {
+      outcome: "no_unresolved_columns",
+      columnCount: 0
+    });
   });
 
   it("sends only masked samples and caches a successful file shape", async () => {

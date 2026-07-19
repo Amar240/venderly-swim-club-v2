@@ -6,7 +6,7 @@ import {
 import { z } from "zod";
 import { logger } from "../lib/logger";
 import type { MappingSuggestion } from "./mapping";
-import type { ScalarTargetField } from "./synonyms";
+import { SCALAR_TARGET_FIELDS, type ScalarTargetField } from "./synonyms";
 
 export type AiMappingColumn = {
   sourceColumn: string;
@@ -14,20 +14,7 @@ export type AiMappingColumn = {
 };
 
 export const AI_MAPPING_TARGETS = [
-  "accountHolderName",
-  "email",
-  "phone",
-  "streetAddress",
-  "city",
-  "postalCode",
-  "state",
-  "country",
-  "memberCount",
-  "guestPasses",
-  "paymentAmount",
-  "orderId",
-  "submittedAt",
-  "medicalNotes",
+  ...SCALAR_TARGET_FIELDS,
   "ignore"
 ] as const satisfies readonly (ScalarTargetField | "ignore")[];
 
@@ -191,11 +178,19 @@ export const proposeMapping = async (columns: AiMappingColumn[]): Promise<Mappin
   const region = process.env.BEDROCK_REGION;
   const modelId = process.env.BEDROCK_MODEL_ID;
 
-  if (!enabled || !region || !modelId || columns.length === 0) {
+  if (!enabled || !region || !modelId) {
     logger.info("AI mapping skipped", {
       outcome: "disabled",
       configured: Boolean(region && modelId),
       columnCount: columns.length
+    });
+    return [];
+  }
+
+  if (columns.length === 0) {
+    logger.info("AI mapping skipped", {
+      outcome: "no_unresolved_columns",
+      columnCount: 0
     });
     return [];
   }

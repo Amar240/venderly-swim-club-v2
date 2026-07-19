@@ -46,7 +46,21 @@ type UploadResponse = {
 };
 
 type DemoSource = "upload" | "sample";
-type EditableMappingTarget = "accountHolderName" | "memberCount" | "guestPasses" | "paymentAmount";
+type EditableMappingTarget =
+  | "accountHolderName"
+  | "email"
+  | "phone"
+  | "streetAddress"
+  | "city"
+  | "postalCode"
+  | "state"
+  | "country"
+  | "memberCount"
+  | "guestPasses"
+  | "paymentAmount"
+  | "orderId"
+  | "submittedAt"
+  | "medicalNotes";
 
 type MappingMethod = "fuzzy" | "structural" | "manual" | "llm";
 
@@ -123,12 +137,30 @@ type DemoView =
       warnings: string[];
     };
 
-const EDITABLE_TARGET_OPTIONS: Array<{ value: EditableMappingTarget; label: string }> = [
+const DEMO_TARGET_OPTIONS: Array<{ value: EditableMappingTarget; label: string }> = [
   { value: "accountHolderName", label: "Account holder name" },
   { value: "memberCount", label: "Member count" },
   { value: "guestPasses", label: "Guest passes" },
   { value: "paymentAmount", label: "Payment amount for tier" }
 ];
+
+const NON_RETAINED_TARGET_OPTIONS: Array<{ value: EditableMappingTarget; label: string }> = [
+  { value: "email", label: "Email" },
+  { value: "phone", label: "Phone" },
+  { value: "streetAddress", label: "Street address" },
+  { value: "city", label: "City" },
+  { value: "postalCode", label: "Postal code" },
+  { value: "state", label: "State" },
+  { value: "country", label: "Country" },
+  { value: "orderId", label: "Order ID" },
+  { value: "submittedAt", label: "Submitted date" },
+  { value: "medicalNotes", label: "Medical notes" }
+];
+
+const EDITABLE_TARGET_OPTIONS = [...DEMO_TARGET_OPTIONS, ...NON_RETAINED_TARGET_OPTIONS];
+const NON_RETAINED_TARGETS = new Set<EditableMappingTarget>(
+  NON_RETAINED_TARGET_OPTIONS.map((option) => option.value)
+);
 
 const TARGET_LABELS: Record<string, string> = {
   accountHolderName: "Account holder name",
@@ -318,12 +350,19 @@ const MappingReview = ({
                           )}
                         >
                           <option value="">Ignore this column</option>
-                          {EDITABLE_TARGET_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
+                          <optgroup label="Used to build your demo">
+                            {DEMO_TARGET_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="Detected for validation, not stored">
+                            {NON_RETAINED_TARGET_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </optgroup>
                         </select>
-                        {entry.method === "llm" && !isEditableTarget(entry.targetField) ? (
-                          <small>Detected as {TARGET_LABELS[entry.targetField ?? ""] ?? "a field"}, not stored in this demo</small>
+                        {selected && NON_RETAINED_TARGETS.has(selected) ? (
+                          <small>Detected for validation, not stored in this demo</small>
                         ) : null}
                       </div>
                     ) : entry.targetField ? (
@@ -620,12 +659,7 @@ export const Demo = () => {
     for (const entry of review.preview.mapping) {
       if (entry.editable) {
         const selected = review.selections[entry.sourceColumn] ?? null;
-        const original = entry.method === "llm"
-          ? null
-          : isEditableTarget(entry.targetField) ? entry.targetField : null;
-        if (selected !== original) {
-          overrides.push({ sourceColumn: entry.sourceColumn, targetField: selected });
-        }
+        overrides.push({ sourceColumn: entry.sourceColumn, targetField: selected });
       }
 
       if (entry.groupKey && entry.canToggleGroup && review.disabledGroups.includes(entry.groupKey)) {
@@ -638,9 +672,7 @@ export const Demo = () => {
     try {
       const formData = new FormData();
       formData.append("file", selectedFile);
-      if (overrides.length > 0) {
-        formData.append("mappingOverrides", JSON.stringify(overrides));
-      }
+      formData.append("mappingOverrides", JSON.stringify(overrides));
       const upload = await api.post<UploadResponse>(`/demo/${review.clubId}/upload`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
       });

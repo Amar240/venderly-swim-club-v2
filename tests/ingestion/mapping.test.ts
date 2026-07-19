@@ -6,6 +6,7 @@ import {
   mergeMappingSuggestions
 } from "../../src/ingestion/mapping";
 import { profileColumns } from "../../src/ingestion/profile";
+import { SCALAR_TARGET_FIELDS } from "../../src/ingestion/synonyms";
 
 const headers = [
   "Your Full Name",
@@ -85,6 +86,16 @@ describe("applyMappingOverrides", () => {
       { sourceColumn: "Missing Column", targetField: "guestPasses" }
     ])).toThrow("Unknown source column");
   });
+
+  it("accepts every canonical scalar target", () => {
+    for (const targetField of SCALAR_TARGET_FIELDS) {
+      const updated = applyMappingOverrides(plan(), headers, [
+        { sourceColumn: "Mystery Balance", targetField }
+      ]);
+
+      expect(updated.scalar[targetField]).toBe("Mystery Balance");
+    }
+  });
 });
 
 describe("mergeMappingSuggestions", () => {
@@ -138,5 +149,6 @@ describe("buildMappingReview", () => {
       groupKey: "family-wide",
       canToggleGroup: true
     });
+    expect(family?.editable).toBe(false);
   });
 });

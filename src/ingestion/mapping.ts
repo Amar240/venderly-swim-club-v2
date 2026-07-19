@@ -1,5 +1,10 @@
 import type { ColumnProfile } from "./profile";
-import { normalizeHeader, type ScalarTargetField, SYNONYM_LOOKUP } from "./synonyms";
+import {
+  normalizeHeader,
+  SCALAR_TARGET_FIELDS,
+  type ScalarTargetField,
+  SYNONYM_LOOKUP
+} from "./synonyms";
 
 export type MappingAction =
   | { sourceColumn: string; targetField: ScalarTargetField; confidence: number; method: "fuzzy" }
@@ -33,17 +38,12 @@ export type MappingPlan = {
   splitName?: { firstColumn: string; lastColumn: string };
   combinedAddressColumn?: string;
   droppedColumns: string[];
-  manualOverrides?: Record<string, EditableMappingTarget | null>;
+  manualOverrides?: Record<string, ScalarTargetField | null>;
 };
 
-export const EDITABLE_MAPPING_TARGETS = [
-  "accountHolderName",
-  "memberCount",
-  "guestPasses",
-  "paymentAmount"
-] as const;
+export const EDITABLE_MAPPING_TARGETS = SCALAR_TARGET_FIELDS;
 
-export type EditableMappingTarget = (typeof EDITABLE_MAPPING_TARGETS)[number];
+export type EditableMappingTarget = ScalarTargetField;
 
 export type MappingOverride = {
   sourceColumn: string;
@@ -481,16 +481,17 @@ export const buildMappingReview = (
     const manualTarget = plan.manualOverrides?.[sourceColumn];
     const scalarTarget = scalarTargetForSource(plan, sourceColumn);
     const structural = structuralTarget(plan, sourceColumn);
-    const dropped = plan.droppedColumns.includes(sourceColumn);
     const targetField = manualTarget !== undefined
       ? manualTarget
       : scalarTarget ?? structural?.targetField ?? null;
-    const editable = !structural?.canToggleGroup;
+    const editable = structural === null;
 
     return {
       sourceColumn,
       targetField,
-      confidence: manualTarget !== undefined ? 1 : targetField === null && !dropped ? 0 : 1,
+      confidence: manualTarget !== undefined
+        ? 1
+        : targetField === null && !plan.droppedColumns.includes(sourceColumn) ? 0 : 1,
       method: manualTarget !== undefined ? "manual" : scalarTarget ? "fuzzy" : "structural",
       sampleValues: distinctSamples(rows, columnIndex),
       editable,

@@ -1,18 +1,21 @@
-export type ScalarTargetField =
-  | "accountHolderName"
-  | "email"
-  | "phone"
-  | "streetAddress"
-  | "city"
-  | "postalCode"
-  | "state"
-  | "country"
-  | "memberCount"
-  | "guestPasses"
-  | "paymentAmount"
-  | "orderId"
-  | "submittedAt"
-  | "medicalNotes";
+export const SCALAR_TARGET_FIELDS = [
+  "accountHolderName",
+  "email",
+  "phone",
+  "streetAddress",
+  "city",
+  "postalCode",
+  "state",
+  "country",
+  "memberCount",
+  "guestPasses",
+  "paymentAmount",
+  "orderId",
+  "submittedAt",
+  "medicalNotes"
+] as const;
+
+export type ScalarTargetField = (typeof SCALAR_TARGET_FIELDS)[number];
 
 export const normalizeHeader = (header: string): string => header.toLowerCase().replace(/[^a-z0-9]/g, "");
 

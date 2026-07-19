@@ -13,6 +13,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:all": "npm test && npm run test:integration",
     "start": "node dist/server.js",
+    "start:app-runner": "prisma migrate deploy && node dist/server.js",
     "frontend:dev": "cd frontend && npm run dev",
     "frontend:build": "cd frontend && npm run build",
     "import:members": "ts-node scripts/importMembers.ts",
@@ -38,7 +39,7 @@
     "multer": "^2.2.0",
     "node-cron": "^4.2.1",
     "prisma": "^5.22.0",
-    "xlsx": "^0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^3.24.1"
   },
   "devDependencies": {

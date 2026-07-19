@@ -76,4 +76,10 @@ describe("mapCanonicalMembership", () => {
       })
     ]);
   });
+
+  it("maps absent household contact fields to null persistence values", () => {
+    const plan = mapCanonicalMembership("club-1", membership({ email: undefined, phone: undefined }));
+
+    expect(plan.persons[0]).toMatchObject({ email: null, phone: null });
+  });
 });

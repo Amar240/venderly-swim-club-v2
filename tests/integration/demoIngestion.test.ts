@@ -3,15 +3,29 @@ import { join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../src/ingestion/aiMapper", () => ({
-  proposeMapping: vi.fn(async (columns: Array<{ sourceColumn: string }>) =>
-    columns.some((column) => column.sourceColumn === "Complimentary Visitor Credits Remaining")
+  proposeMapping: vi.fn(async (columns: Array<{ sourceColumn: string }>) => {
+    const targets: Record<string, string> = {
+      "Household Lead": "accountHolderName",
+      "Electronic Mail Address": "email",
+      "Ring Number": "phone",
+      "Residence Line": "streetAddress",
+      Municipality: "city",
+      "Mailing Zone": "postalCode",
+      "Persons On Plan": "memberCount",
+      "Complimentary Visitor Credits Remaining": "guestPasses",
+      "Dues Collected": "paymentAmount",
+      "Enrolment Logged": "submittedAt",
+      "Health Remarks": "medicalNotes"
+    };
+
+    return columns.flatMap((column) => targets[column.sourceColumn]
       ? [{
-          sourceColumn: "Complimentary Visitor Credits Remaining",
-          targetField: "guestPasses",
+          sourceColumn: column.sourceColumn,
+          targetField: targets[column.sourceColumn],
           confidence: 0.94
         }]
-      : []
-  )
+      : []);
+  })
 }));
 import request from "supertest";
 import { ingestCsv } from "../../src/ingestion/normalize";
@@ -19,9 +33,26 @@ import { prisma } from "../../src/lib/prisma";
 import { getTestApp } from "../helpers/app";
 import { resetDb } from "../helpers/reset";
 import { cleanupExpiredDemos } from "../../src/lib/demoCleanup";
+import { SCALAR_TARGET_FIELDS } from "../../src/ingestion/synonyms";
 
 const fixturePath = join(process.cwd(), "tests", "fixtures", "ingestion", "base_wedgewood_wide.csv");
 const samplePath = join(process.cwd(), "assets", "samples", "sample-swim-club.csv");
+const aiMappingFixturePath = join(process.cwd(), "test-files", "ai-mapping-test.csv");
+
+const completeScalarMapping = (mapping: Array<{
+  sourceColumn: string;
+  targetField: string | null;
+  editable: boolean;
+}>) => mapping
+  .filter((entry) => entry.editable)
+  .map((entry) => ({
+    sourceColumn: entry.sourceColumn,
+    targetField: entry.targetField && SCALAR_TARGET_FIELDS.includes(
+      entry.targetField as (typeof SCALAR_TARGET_FIELDS)[number]
+    )
+      ? entry.targetField
+      : null
+  }));
 
 const startDemo = async () => {
   const app = await getTestApp();
@@ -157,12 +188,12 @@ describe("demo ingestion (integration)", () => {
     });
   });
 
-  it("previews an AI suggestion and loads it through a confirmed override", async () => {
+  it("loads an accepted AI mapping without a manual edit or contact columns", async () => {
     const app = await getTestApp();
     const start = await startDemo();
     const csv = [
-      "Your Full Name,Your Phone,Your Email,Select the # of Members for your Membership,Complimentary Visitor Credits Remaining",
-      "Ada Lovelace,3025551212,ada@example.com,1,7"
+      "Household Lead,Complimentary Visitor Credits Remaining",
+      "Ada Lovelace,7"
     ].join("\n");
 
     const preview = await request(app)
@@ -170,6 +201,12 @@ describe("demo ingestion (integration)", () => {
       .attach("file", Buffer.from(csv), "ai-preview.csv")
       .expect(200);
     expect(preview.body.mapping).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceColumn: "Household Lead",
+        targetField: "accountHolderName",
+        method: "llm",
+        confidence: 0.94
+      }),
       expect.objectContaining({
         sourceColumn: "Complimentary Visitor Credits Remaining",
         targetField: "guestPasses",
@@ -180,10 +217,7 @@ describe("demo ingestion (integration)", () => {
 
     await request(app)
       .post(`/api/v1/demo/${start.body.demoClubId}/upload`)
-      .field("mappingOverrides", JSON.stringify([{
-        sourceColumn: "Complimentary Visitor Credits Remaining",
-        targetField: "guestPasses"
-      }]))
+      .field("mappingOverrides", JSON.stringify(completeScalarMapping(preview.body.mapping)))
       .attach("file", Buffer.from(csv), "ai-preview.csv")
       .expect(200);
 
@@ -191,6 +225,34 @@ describe("demo ingestion (integration)", () => {
       .get(`/api/v1/demo/${start.body.demoClubId}/overview`)
       .expect(200);
     expect(overview.body.memberships[0].guestPassesTotal).toBe(7);
+  });
+
+  it("loads the 25-row AI mapping fixture from the complete reviewed mapping", async () => {
+    const app = await getTestApp();
+    const start = await startDemo();
+
+    const preview = await request(app)
+      .post(`/api/v1/demo/${start.body.demoClubId}/preview`)
+      .attach("file", aiMappingFixturePath)
+      .expect(200);
+    expect(preview.body.mapping).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sourceColumn: "Household Lead", targetField: "accountHolderName", method: "llm" }),
+      expect.objectContaining({ sourceColumn: "Ring Number", targetField: "phone", method: "llm" }),
+      expect.objectContaining({
+        sourceColumn: "Complimentary Visitor Credits Remaining",
+        targetField: "guestPasses",
+        method: "llm"
+      })
+    ]));
+
+    const upload = await request(app)
+      .post(`/api/v1/demo/${start.body.demoClubId}/upload`)
+      .field("mappingOverrides", JSON.stringify(completeScalarMapping(preview.body.mapping)))
+      .attach("file", aiMappingFixturePath)
+      .expect(200);
+
+    expect(upload.body.membershipsCreated).toBe(25);
+    expect(await prisma.membership.count({ where: { clubId: start.body.demoClubId } })).toBe(25);
   });
 
   it("returns a public overview for a loaded demo club", async () => {

@@ -9,8 +9,8 @@ export type CanonicalPerson = {
 
 export type CanonicalMembership = {
   accountHolderName: string;
-  email: string;
-  phone: string;
+  email?: string;
+  phone?: string;
   streetAddress?: string;
   city?: string;
   postalCode?: string;
@@ -40,8 +40,8 @@ export const canonicalPersonSchema = z.object({
 
 export const canonicalMembershipSchema = z.object({
   accountHolderName: z.string().trim().min(1),
-  email: z.string().trim().email(),
-  phone: z.string().trim().min(1),
+  email: z.string().trim().email().optional(),
+  phone: z.string().trim().min(1).optional(),
   streetAddress: z.string().trim().min(1).optional(),
   city: z.string().trim().min(1).optional(),
   postalCode: z.string().trim().min(1).optional(),

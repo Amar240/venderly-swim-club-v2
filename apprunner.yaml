@@ -5,7 +5,7 @@ build:
     pre-build:
       - echo "Building from Dockerfile"
 run:
-  command: node dist/server.js
+  command: npm run start:app-runner
   network:
     port: 3000
     env: PORT
