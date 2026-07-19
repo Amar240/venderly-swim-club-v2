@@ -14,6 +14,7 @@ import {
 } from "../ingestion/mapping";
 import type { IngestResult } from "../ingestion/types";
 import { loadIngestResult } from "../ingestion/load";
+import { HEADER_SCAN_ROWS, InvalidHeaderRowError } from "../ingestion/parse";
 import { logger } from "../lib/logger";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../middleware/errorHandler";
@@ -90,6 +91,30 @@ const parseMappingOverrides = (value: unknown): MappingOverride[] => {
   }
 };
 
+const parseHeaderRowIndex = (value: unknown): number | undefined => {
+  if (value === undefined || value === "") {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || !/^\d+$/.test(value)) {
+    throw new HttpError(400, "INVALID_HEADER_ROW", "Header row must be a non-negative whole number");
+  }
+
+  const index = Number.parseInt(value, 10);
+  if (!Number.isSafeInteger(index) || index >= HEADER_SCAN_ROWS) {
+    throw new HttpError(400, "INVALID_HEADER_ROW", `Header row must be within the first ${HEADER_SCAN_ROWS} rows`);
+  }
+
+  return index;
+};
+
+const toIngestionError = (error: unknown): HttpError => {
+  const message = error instanceof Error ? error.message : "The spreadsheet could not be parsed";
+  return error instanceof InvalidHeaderRowError
+    ? new HttpError(400, "INVALID_HEADER_ROW", message)
+    : new HttpError(400, "INGESTION_FAILED", message);
+};
+
 const receiveDemoFile: RequestHandler = (req, res, next) => {
   upload.single("file")(req, res, (error: unknown) => {
     if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
@@ -157,6 +182,7 @@ const ingestAndLoadDemo = async (input: {
   filename: string;
   detectedFormat: string;
   mappingOverrides?: MappingOverride[];
+  headerRowIndex?: number;
 }): Promise<
   | {
       status: 200;
@@ -174,8 +200,13 @@ const ingestAndLoadDemo = async (input: {
   let result: IngestResult;
 
   try {
-    result = ingestFile(input.buffer, input.filename, input.mappingOverrides);
+    result = ingestFile(input.buffer, input.filename, input.mappingOverrides, {
+      headerRowIndex: input.headerRowIndex
+    });
   } catch (error) {
+    if (error instanceof InvalidHeaderRowError) {
+      throw toIngestionError(error);
+    }
     const message = error instanceof Error ? error.message : "The spreadsheet could not be parsed";
     await persistFailedJob({
       clubId: input.clubId,
@@ -354,13 +385,13 @@ demoRouter.post("/:clubId/preview", uploadRateLimit, receiveDemoFile, async (req
 
     await assertUsableDemoClub(clubId);
     validateSpreadsheetFormat(file.originalname);
+    const headerRowIndex = parseHeaderRowIndex(req.body?.headerRowIndex);
 
     let analysis: ReturnType<typeof analyzeIngestFile>;
     try {
-      analysis = analyzeIngestFile(file.buffer, file.originalname);
+      analysis = analyzeIngestFile(file.buffer, file.originalname, [], { headerRowIndex });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "The spreadsheet could not be parsed";
-      throw new HttpError(400, "INGESTION_FAILED", message);
+      throw toIngestionError(error);
     }
 
     const unresolvedColumns = analysis.mapping
@@ -377,7 +408,10 @@ demoRouter.post("/:clubId/preview", uploadRateLimit, receiveDemoFile, async (req
     const mapping = mergeMappingSuggestions(analysis.mapping, suggestions);
     const effectiveOverrides = aiMappingOverrides(mapping);
     const effectiveAnalysis = effectiveOverrides.length > 0
-      ? analyzeIngestFile(file.buffer, file.originalname, effectiveOverrides)
+      ? analyzeIngestFile(file.buffer, file.originalname, effectiveOverrides, {
+          headerRowIndex: analysis.structure.headerRowIndex,
+          detectedBy: analysis.structure.detectedBy
+        })
       : analysis;
 
     res.json({
@@ -385,7 +419,8 @@ demoRouter.post("/:clubId/preview", uploadRateLimit, receiveDemoFile, async (req
       droppedColumns: effectiveAnalysis.result.droppedColumns,
       stats: effectiveAnalysis.stats,
       sampleMemberships: effectiveAnalysis.result.memberships.slice(0, 3),
-      warnings: effectiveAnalysis.result.warnings
+      warnings: effectiveAnalysis.result.warnings,
+      structure: effectiveAnalysis.structure
     });
   } catch (error) {
     next(error);
@@ -405,13 +440,15 @@ demoRouter.post("/:clubId/upload", uploadRateLimit, receiveDemoFile, async (req,
 
     const detectedFormat = validateSpreadsheetFormat(file.originalname);
     const mappingOverrides = parseMappingOverrides(req.body?.mappingOverrides);
+    const headerRowIndex = parseHeaderRowIndex(req.body?.headerRowIndex);
 
     const outcome = await ingestAndLoadDemo({
       clubId,
       buffer: file.buffer,
       filename: file.originalname,
       detectedFormat,
-      mappingOverrides
+      mappingOverrides,
+      headerRowIndex
     });
     res.status(outcome.status).json(outcome.body);
   } catch (error) {

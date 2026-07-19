@@ -6,7 +6,12 @@ import {
   type MappingPlan,
   type MappingReviewEntry
 } from "./mapping";
-import { parseCsv, parseXlsx } from "./parse";
+import {
+  parseCsv,
+  parseXlsx,
+  type HeaderSelection,
+  type ParseTableOptions
+} from "./parse";
 import { profileColumns } from "./profile";
 import type { ScalarTargetField } from "./synonyms";
 import {
@@ -42,6 +47,16 @@ type ParsedIngestFile = {
   headers: string[];
   rows: string[][];
   warnings: string[];
+  structure: HeaderSelection;
+};
+
+export type IngestFileOptions = {
+  headerRowIndex?: number;
+  detectedBy?: "auto" | "manual";
+};
+
+export type IngestFileAnalysis = IngestAnalysis & {
+  structure: HeaderSelection;
 };
 
 const toRecords = (headers: string[], rows: string[][]): RowRecord[] =>
@@ -244,12 +259,21 @@ export const analyzeTable = (
 export const ingestTable = (headers: string[], rows: string[][]): IngestResult =>
   analyzeTable(headers, rows).result;
 
-export const parseIngestFile = (input: Buffer | string, filename: string): ParsedIngestFile => {
+export const parseIngestFile = (
+  input: Buffer | string,
+  filename: string,
+  options: IngestFileOptions = {}
+): ParsedIngestFile => {
   const extension = filename.toLowerCase().split(".").pop() ?? "";
+  const parseOptions: ParseTableOptions = {
+    headerRowIndex: options.headerRowIndex,
+    detectedBy: options.detectedBy,
+    validateCandidate: (headers, rows) => analyzeTable(headers, rows).stats.validCount
+  };
 
   if (extension === "csv") {
     const text = Buffer.isBuffer(input) ? input.toString("utf8") : input;
-    return parseCsv(text);
+    return parseCsv(text, parseOptions);
   }
 
   if (extension === "xlsx" || extension === "xls") {
@@ -257,7 +281,7 @@ export const parseIngestFile = (input: Buffer | string, filename: string): Parse
       throw new Error("Excel ingestion requires a file buffer.");
     }
 
-    return parseXlsx(input);
+    return parseXlsx(input, parseOptions);
   }
 
   if (extension === "numbers") {
@@ -270,12 +294,14 @@ export const parseIngestFile = (input: Buffer | string, filename: string): Parse
 export const analyzeIngestFile = (
   input: Buffer | string,
   filename: string,
-  overrides: MappingOverride[] = []
-): IngestAnalysis => {
-  const parsed = parseIngestFile(input, filename);
+  overrides: MappingOverride[] = [],
+  options: IngestFileOptions = {}
+): IngestFileAnalysis => {
+  const parsed = parseIngestFile(input, filename, options);
   const analysis = analyzeTable(parsed.headers, parsed.rows, overrides);
   return {
     ...analysis,
+    structure: parsed.structure,
     result: {
       ...analysis.result,
       warnings: [...parsed.warnings, ...analysis.result.warnings]
@@ -290,5 +316,6 @@ export const ingestCsv = (text: string): IngestResult => {
 export const ingestFile = (
   input: Buffer | string,
   filename: string,
-  overrides: MappingOverride[] = []
-): IngestResult => analyzeIngestFile(input, filename, overrides).result;
+  overrides: MappingOverride[] = [],
+  options: IngestFileOptions = {}
+): IngestResult => analyzeIngestFile(input, filename, overrides, options).result;

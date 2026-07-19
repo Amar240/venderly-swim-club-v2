@@ -15,7 +15,18 @@ vi.mock("../../src/ingestion/aiMapper", () => ({
       "Complimentary Visitor Credits Remaining": "guestPasses",
       "Dues Collected": "paymentAmount",
       "Enrolment Logged": "submittedAt",
-      "Health Remarks": "medicalNotes"
+      "Health Remarks": "medicalNotes",
+      "Acct Holder (Last, First)": "accountHolderName",
+      "E-Addr": "email",
+      Cell: "phone",
+      "Str Addr": "streetAddress",
+      Twn: "city",
+      Zip4: "postalCode",
+      "Fam Sz": "memberCount",
+      "Bal Passes": "guestPasses",
+      "Amt Pd": "paymentAmount",
+      "Dt Recd": "submittedAt",
+      "Notes / Med": "medicalNotes"
     };
 
     return columns.flatMap((column) => targets[column.sourceColumn]
@@ -38,6 +49,7 @@ import { SCALAR_TARGET_FIELDS } from "../../src/ingestion/synonyms";
 const fixturePath = join(process.cwd(), "tests", "fixtures", "ingestion", "base_wedgewood_wide.csv");
 const samplePath = join(process.cwd(), "assets", "samples", "sample-swim-club.csv");
 const aiMappingFixturePath = join(process.cwd(), "test-files", "ai-mapping-test.csv");
+const hardAiMappingFixturePath = join(process.cwd(), "test-files", "ai-mapping-hard.csv");
 
 const completeScalarMapping = (mapping: Array<{
   sourceColumn: string;
@@ -140,6 +152,10 @@ describe("demo ingestion (integration)", () => {
       invalidCount: 0
     });
     expect(preview.body.sampleMemberships).toHaveLength(3);
+    expect(preview.body.structure).toMatchObject({
+      headerRowIndex: 0,
+      detectedBy: "auto"
+    });
     expect(preview.body.mapping).toEqual(expect.arrayContaining([
       expect.objectContaining({
         sourceColumn: "Your Full Name",
@@ -157,6 +173,55 @@ describe("demo ingestion (integration)", () => {
     expect(await prisma.membership.count({ where: { clubId: start.body.demoClubId } })).toBe(0);
     expect(await prisma.person.count({ where: { clubId: start.body.demoClubId } })).toBe(0);
     expect(await prisma.ingestionJob.count({ where: { clubId: start.body.demoClubId } })).toBe(0);
+  });
+
+  it("detects and manually reuses the hard fixture header row", async () => {
+    const app = await getTestApp();
+    const automaticDemo = await startDemo();
+
+    const automatic = await request(app)
+      .post(`/api/v1/demo/${automaticDemo.body.demoClubId}/preview`)
+      .attach("file", hardAiMappingFixturePath)
+      .expect(200);
+
+    expect(automatic.body.structure).toMatchObject({
+      headerRowIndex: 4,
+      detectedBy: "auto",
+      candidateRows: expect.arrayContaining([{ index: 3, cells: [] }])
+    });
+    expect(automatic.body.stats).toMatchObject({
+      totalRows: 30,
+      membershipsFound: 30,
+      validCount: 30,
+      invalidCount: 0
+    });
+    expect(await prisma.membership.count({ where: { clubId: automaticDemo.body.demoClubId } })).toBe(0);
+    expect(await prisma.person.count({ where: { clubId: automaticDemo.body.demoClubId } })).toBe(0);
+    expect(await prisma.ingestionJob.count({ where: { clubId: automaticDemo.body.demoClubId } })).toBe(0);
+
+    const wrong = await request(app)
+      .post(`/api/v1/demo/${automaticDemo.body.demoClubId}/preview`)
+      .field("headerRowIndex", "0")
+      .attach("file", hardAiMappingFixturePath)
+      .expect(200);
+    expect(wrong.body.structure).toMatchObject({ headerRowIndex: 0, detectedBy: "manual" });
+    expect(wrong.body.stats).toMatchObject({ membershipsFound: 0, validCount: 0 });
+
+    const manual = await request(app)
+      .post(`/api/v1/demo/${automaticDemo.body.demoClubId}/preview`)
+      .field("headerRowIndex", "4")
+      .attach("file", hardAiMappingFixturePath)
+      .expect(200);
+    expect(manual.body.structure).toMatchObject({ headerRowIndex: 4, detectedBy: "manual" });
+    expect(manual.body.stats).toMatchObject({ membershipsFound: 30, validCount: 30, invalidCount: 0 });
+
+    const upload = await request(app)
+      .post(`/api/v1/demo/${automaticDemo.body.demoClubId}/upload`)
+      .field("headerRowIndex", "4")
+      .field("mappingOverrides", JSON.stringify(completeScalarMapping(manual.body.mapping)))
+      .attach("file", hardAiMappingFixturePath)
+      .expect(200);
+    expect(upload.body.membershipsCreated).toBe(30);
   });
 
   it("loads a confirmed upload with a corrected scalar mapping", async () => {

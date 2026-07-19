@@ -102,6 +102,11 @@ type PreviewResponse = {
   };
   sampleMemberships: PreviewMembership[];
   warnings: string[];
+  structure: {
+    headerRowIndex: number;
+    detectedBy: "auto" | "manual";
+    candidateRows: Array<{ index: number; cells: string[] }>;
+  };
 };
 
 type MappingOverride = {
@@ -244,12 +249,16 @@ const MappingReview = ({
   review,
   onSelectionChange,
   onToggleGroup,
+  onHeaderRowChange,
+  headerPreviewLoading,
   onBack,
   onConfirm
 }: {
   review: ReviewView;
   onSelectionChange: (sourceColumn: string, targetField: EditableMappingTarget | null) => void;
   onToggleGroup: (groupKey: string) => void;
+  onHeaderRowChange: (headerRowIndex: number) => void;
+  headerPreviewLoading: boolean;
   onBack: () => void;
   onConfirm: () => void;
 }) => {
@@ -294,6 +303,38 @@ const MappingReview = ({
           </div>
         </div>
       ) : null}
+
+      <details className="vld-header-review">
+        <summary>
+          <span>
+            Reading row {review.preview.structure.headerRowIndex + 1} as your column headers
+            {review.preview.structure.detectedBy === "manual" ? " (selected)" : ""}
+          </span>
+          <b>Not right?</b>
+        </summary>
+        <div className="vld-header-candidates">
+          <p>Choose the row that contains the names of your spreadsheet columns.</p>
+          {review.preview.structure.candidateRows.map((candidate) => {
+            const selected = candidate.index === review.preview.structure.headerRowIndex;
+            return (
+              <button
+                key={candidate.index}
+                type="button"
+                className={selected ? "is-selected" : undefined}
+                disabled={selected || headerPreviewLoading}
+                onClick={() => onHeaderRowChange(candidate.index)}
+              >
+                <span>Row {candidate.index + 1}</span>
+                <small>{candidate.cells.length > 0 ? candidate.cells.join(" | ") : "Blank row"}</small>
+                {selected ? <b>Current</b> : null}
+              </button>
+            );
+          })}
+          {headerPreviewLoading ? (
+            <span className="vld-header-loading"><Loader2 aria-hidden="true" /> Reading that row...</span>
+          ) : null}
+        </div>
+      </details>
 
       <div className="vld-mapping-table-wrap">
         <table className="vld-mapping-table">
@@ -458,6 +499,7 @@ const MappingReview = ({
 
 export const Demo = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [headerPreviewLoading, setHeaderPreviewLoading] = useState(false);
   const [view, setView] = useState<DemoView>({ status: "start" });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState("");
@@ -642,6 +684,40 @@ export const Demo = () => {
     });
   };
 
+  const selectHeaderRow = async (headerRowIndex: number): Promise<void> => {
+    if (view.status !== "review" || !selectedFile || headerPreviewLoading) {
+      return;
+    }
+
+    const previousReview = view;
+    setHeaderPreviewLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      formData.append("headerRowIndex", String(headerRowIndex));
+      const preview = await api.post<PreviewResponse>(`/demo/${view.clubId}/preview`, formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      setView({
+        status: "review",
+        clubId: view.clubId,
+        preview: preview.data,
+        selections: initialSelections(preview.data),
+        disabledGroups: []
+      });
+    } catch (error) {
+      const message = axios.isAxiosError<ErrorEnvelope>(error)
+        ? error.response?.data?.error?.message ?? "We could not read that header row."
+        : "We could not read that header row.";
+      setView({
+        ...previousReview,
+        confirmError: { message, warnings: [] }
+      });
+    } finally {
+      setHeaderPreviewLoading(false);
+    }
+  };
+
   const confirmUpload = async (): Promise<void> => {
     if (view.status !== "review" || !selectedFile) {
       setView({
@@ -673,6 +749,7 @@ export const Demo = () => {
       const formData = new FormData();
       formData.append("file", selectedFile);
       formData.append("mappingOverrides", JSON.stringify(overrides));
+      formData.append("headerRowIndex", String(review.preview.structure.headerRowIndex));
       const upload = await api.post<UploadResponse>(`/demo/${review.clubId}/upload`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
       });
@@ -843,6 +920,8 @@ export const Demo = () => {
               review={view}
               onSelectionChange={updateSelection}
               onToggleGroup={toggleFamilyGroup}
+              onHeaderRowChange={(index) => void selectHeaderRow(index)}
+              headerPreviewLoading={headerPreviewLoading}
               onBack={() => setView({ status: "start" })}
               onConfirm={() => void confirmUpload()}
             />
