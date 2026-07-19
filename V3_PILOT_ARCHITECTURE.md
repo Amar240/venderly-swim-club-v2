@@ -1,6 +1,6 @@
 # Venderly Swim Club — v3 "Pilot / Self-Serve Demo" Architecture
 
-**Status:** Proposed
+**Status:** Public pilot implementation in progress
 **Date:** 2026-07-15
 **Author:** Amar
 **Deciders:** Amar, Ryan (Venderly)
@@ -10,7 +10,7 @@
 
 ## 1. What v3 is for
 
-v2 proved the product for **one** club (Wedgewood). v3 turns the product into something Venderly can **sell** to *other* swim clubs. The core insight driving the design: the best sales pitch is not a slideshow — it is letting a prospect see **their own club, with their own members, already running inside the product**, and then converting that demo into a real live club with a single click.
+v2 proved the product for **one** club (Wedgewood). The first v3 release is an isolated public pilot that lets a prospect upload a supported CSV or Excel layout and explore a seven-day demo. Production provisioning, mapping review, and broader layout support remain later phases.
 
 So v3 is a **self-serve demo funnel** with five stages:
 

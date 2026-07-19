@@ -154,4 +154,21 @@ describe("ingestCsv fixtures", () => {
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings[0]).toContain("row 3");
   });
+
+  it("detects the real header after an introductory title row", () => {
+    const fixture = readFixture("base_wedgewood_wide.csv").replace(/\r\n/g, "\n");
+    const result = ingestCsv(`fake_750_memberships_final\n${fixture}`);
+
+    expect(result.memberships).toHaveLength(40);
+    expect(result.memberships[0]?.accountHolderName).toBe("Caleb Lewis");
+    expect(result.warnings[0]).toBe("Skipped 1 introductory row before the detected header.");
+  });
+
+  it("rejects tables beyond the public pilot row and column limits", () => {
+    const tooManyColumns = Array.from({ length: 101 }, (_, index) => `Column ${index}`).join(",");
+    const tooManyRows = ["Name,Phone,Email", ...Array.from({ length: 5_001 }, () => "A,3025550100,a@example.com")].join("\n");
+
+    expect(() => ingestCsv(`${tooManyColumns}\nvalue`)).toThrow("maximum is 100");
+    expect(() => ingestCsv(tooManyRows)).toThrow("maximum is 5,000");
+  });
 });

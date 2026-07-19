@@ -18,17 +18,26 @@ const membership = (overrides: Partial<CanonicalMembership> = {}): CanonicalMemb
 });
 
 describe("mapCanonicalMembership", () => {
-  it("maps payment dollars, tier, capacity, and household fields", () => {
+  it("maps tier and capacity while omitting sensitive household fields", () => {
     const plan = mapCanonicalMembership("club-1", membership());
 
     expect(plan.membership).toMatchObject({
       clubId: "club-1",
       tier: "Adult",
       maxMembers: 2,
-      paymentAmountCents: 24000,
+      paymentAmountCents: 0,
       guestPassesTotal: 5,
       source: "demo_import",
       status: "ACTIVE"
+    });
+    expect(plan.membership).toMatchObject({
+      addressStreet: null,
+      addressCity: null,
+      addressState: null,
+      addressPostalCode: null,
+      addressCountry: null,
+      submittedAt: null,
+      externalOrderId: null
     });
   });
 
@@ -43,7 +52,7 @@ describe("mapCanonicalMembership", () => {
     expect(plan.membership.paymentAmountCents).toBe(0);
   });
 
-  it("maps primary and additional people with the correct contact ownership", () => {
+  it("maps people without retaining contact or medical details", () => {
     const plan = mapCanonicalMembership("club-1", membership());
 
     expect(plan.persons).toEqual([
@@ -52,8 +61,9 @@ describe("mapCanonicalMembership", () => {
         lastName: "Lewis",
         isPrimary: true,
         relationship: "self",
-        email: "caleb@example.com",
-        allergies: "Asthma"
+        email: null,
+        phone: null,
+        allergies: null
       }),
       expect.objectContaining({
         firstName: "Ethan",
@@ -61,6 +71,7 @@ describe("mapCanonicalMembership", () => {
         isPrimary: false,
         relationship: "member",
         email: null,
+        phone: null,
         allergies: null
       })
     ]);

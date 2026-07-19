@@ -6,6 +6,7 @@ import { ingestCsv } from "../../src/ingestion/normalize";
 import { prisma } from "../../src/lib/prisma";
 import { getTestApp } from "../helpers/app";
 import { resetDb } from "../helpers/reset";
+import { cleanupExpiredDemos } from "../../src/lib/demoCleanup";
 
 const fixturePath = join(process.cwd(), "tests", "fixtures", "ingestion", "base_wedgewood_wide.csv");
 
@@ -14,7 +15,8 @@ const startDemo = async () => {
   return request(app).post("/api/v1/demo/start").send({
     clubName: "Demo Swim Club",
     contactName: "Demo Owner",
-    email: "owner@example.com"
+    email: "owner@example.com",
+    authorized: true
   });
 };
 
@@ -34,6 +36,7 @@ describe("demo ingestion (integration)", () => {
     expect(start.status).toBe(201);
     expect(start.body.demoClubId).toEqual(expect.any(String));
     expect(start.body.prospectId).toEqual(expect.any(String));
+    expect(start.body.expiresAt).toEqual(expect.any(String));
 
     const canonical = ingestCsv(readFileSync(fixturePath, "utf8"));
     const expectedPersons = canonical.memberships.reduce((sum, item) => sum + item.persons.length, 0);
@@ -62,6 +65,9 @@ describe("demo ingestion (integration)", () => {
     expect(personCount).toBe(expectedPersons);
     expect(primary.isPrimary).toBe(true);
     expect(primary.relationship).toBe("self");
+    expect(primary.email).toBeNull();
+    expect(primary.phone).toBeNull();
+    expect(primary.allergies).toBeNull();
     expect(job).toMatchObject({
       clubId: start.body.demoClubId,
       rawFilename: "base_wedgewood_wide.csv",
@@ -70,6 +76,97 @@ describe("demo ingestion (integration)", () => {
       status: "loaded"
     });
     expect(prospect.clubId).toBe(start.body.demoClubId);
+    expect(prospect.expiresAt.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("returns a public overview for a loaded demo club", async () => {
+    const app = await getTestApp();
+    const start = await startDemo();
+
+    await request(app)
+      .post(`/api/v1/demo/${start.body.demoClubId}/upload`)
+      .attach("file", fixturePath)
+      .expect(200);
+
+    const response = await request(app)
+      .get(`/api/v1/demo/${start.body.demoClubId}/overview`)
+      .expect(200);
+
+    expect(response.body.club).toEqual({ name: "Demo Swim Club" });
+    expect(response.body.summary).toMatchObject({
+      memberships: 40,
+      members: 139
+    });
+    expect(response.body.memberships).toHaveLength(40);
+    expect(response.body.memberships[0]).toMatchObject({
+      accountHolderName: "Caleb Lewis"
+    });
+    expect(response.body.memberships[0].persons[0]).toMatchObject({
+      firstName: "Caleb",
+      lastName: "Lewis",
+      isPrimary: true
+    });
+  });
+
+  it("does not expose a non-demo club through the public overview", async () => {
+    const app = await getTestApp();
+    const club = await prisma.club.create({
+      data: { name: "Private Swim Club", slug: "private-swim-club" }
+    });
+
+    const response = await request(app).get(`/api/v1/demo/${club.id}/overview`);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("DEMO_NOT_FOUND");
+  });
+
+  it("rejects expired demo uploads and overviews", async () => {
+    const app = await getTestApp();
+    const start = await startDemo();
+    await prisma.prospect.updateMany({
+      where: { clubId: start.body.demoClubId },
+      data: { expiresAt: new Date(Date.now() - 1_000) }
+    });
+
+    await request(app).get(`/api/v1/demo/${start.body.demoClubId}/overview`).expect(404);
+    await request(app)
+      .post(`/api/v1/demo/${start.body.demoClubId}/upload`)
+      .attach("file", fixturePath)
+      .expect(404);
+  });
+
+  it("deletes expired demo records without touching active demos", async () => {
+    const app = await getTestApp();
+    const expired = await startDemo();
+    const active = await startDemo();
+    await request(app)
+      .post(`/api/v1/demo/${expired.body.demoClubId}/upload`)
+      .attach("file", fixturePath)
+      .expect(200);
+    await prisma.prospect.updateMany({
+      where: { clubId: expired.body.demoClubId },
+      data: { expiresAt: new Date(Date.now() - 1_000) }
+    });
+
+    await expect(cleanupExpiredDemos()).resolves.toBe(1);
+    expect(await prisma.club.findUnique({ where: { id: expired.body.demoClubId } })).toBeNull();
+    expect(await prisma.membership.count({ where: { clubId: expired.body.demoClubId } })).toBe(0);
+    expect(await prisma.person.count({ where: { clubId: expired.body.demoClubId } })).toBe(0);
+    expect(await prisma.ingestionJob.count({ where: { clubId: expired.body.demoClubId } })).toBe(0);
+    expect(await prisma.club.findUnique({ where: { id: active.body.demoClubId } })).not.toBeNull();
+  });
+
+  it("requires upload authorization before creating a demo", async () => {
+    const app = await getTestApp();
+    const response = await request(app).post("/api/v1/demo/start").send({
+      clubName: "Demo Swim Club",
+      contactName: "Demo Owner",
+      email: "owner@example.com",
+      authorized: false
+    });
+
+    expect(response.status).toBe(400);
+    expect(await prisma.club.count()).toBe(0);
   });
 
   it("persists a failed job for an Apple Numbers ingestion attempt", async () => {

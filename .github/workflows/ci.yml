@@ -5,6 +5,7 @@ on:
     branches:
       - dev
       - main
+      - v3
   pull_request:
     branches:
       - main
@@ -12,6 +13,25 @@ on:
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: swimclub_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d swimclub_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/swimclub_test?schema=public
+      DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/swimclub_test?schema=public
+      JWT_SECRET: ci-only-jwt-secret
+      WEBHOOK_SECRET: ci-only-webhook-secret
 
     steps:
       - name: Check out repository
@@ -37,6 +57,9 @@ jobs:
 
       - name: Run unit tests
         run: npm test
+
+      - name: Run integration tests
+        run: npm run test:integration
 
       - name: Build
         run: npm run build

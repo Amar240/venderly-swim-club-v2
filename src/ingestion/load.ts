@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Prisma, PrismaClient } from "@prisma/client";
 import {
   parseMembershipTier,
@@ -14,6 +15,7 @@ export type LoadContext = {
 
 export type PersistencePlan = {
   membership: {
+    id: string;
     clubId: string;
     tier: string;
     maxMembers: number;
@@ -53,18 +55,19 @@ export const mapCanonicalMembership = (
 
   return {
     membership: {
+      id: randomUUID(),
       clubId,
       tier: tier.tier,
       maxMembers: Math.max(tier.maxMembers, canonical.persons.length),
-      paymentAmountCents: Math.round((canonical.paymentAmount ?? 0) * 100),
+      paymentAmountCents: 0,
       guestPassesTotal: canonical.guestPasses ?? 0,
-      addressStreet: canonical.streetAddress ?? null,
-      addressCity: canonical.city ?? null,
-      addressState: canonical.state ?? null,
-      addressPostalCode: canonical.postalCode ?? null,
-      addressCountry: canonical.country ?? null,
-      submittedAt: canonical.submittedAt ? new Date(canonical.submittedAt) : null,
-      externalOrderId: canonical.orderId ?? null,
+      addressStreet: null,
+      addressCity: null,
+      addressState: null,
+      addressPostalCode: null,
+      addressCountry: null,
+      submittedAt: null,
+      externalOrderId: null,
       source: "demo_import",
       status: "ACTIVE"
     },
@@ -77,10 +80,10 @@ export const mapCanonicalMembership = (
         lastName,
         isPrimary: person.isPrimary,
         relationship: person.isPrimary ? "self" : "member",
-        email: person.isPrimary ? canonical.email : null,
-        phone: person.phone ?? null,
+        email: null,
+        phone: null,
         age: person.age ?? null,
-        allergies: person.isPrimary ? canonical.medicalNotes ?? null : null,
+        allergies: null,
         status: "ACTIVE" as const
       };
     })
@@ -89,6 +92,37 @@ export const mapCanonicalMembership = (
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : "Unknown persistence error";
+
+const BATCH_SIZE = 250;
+
+const createPlans = async (
+  prisma: PrismaClient,
+  plans: PersistencePlan[]
+): Promise<void> => {
+  await prisma.$transaction([
+    prisma.membership.createMany({ data: plans.map((plan) => plan.membership) }),
+    prisma.person.createMany({
+      data: plans.flatMap((plan) =>
+        plan.persons.map((person) => ({
+          ...person,
+          membershipId: plan.membership.id
+        }))
+      )
+    })
+  ]);
+};
+
+const createSinglePlan = async (prisma: PrismaClient, plan: PersistencePlan): Promise<void> => {
+  await prisma.$transaction([
+    prisma.membership.create({ data: plan.membership }),
+    prisma.person.createMany({
+      data: plan.persons.map((person) => ({
+        ...person,
+        membershipId: plan.membership.id
+      }))
+    })
+  ]);
+};
 
 export const loadIngestResult = async (
   prisma: PrismaClient,
@@ -104,32 +138,33 @@ export const loadIngestResult = async (
   let membershipsCreated = 0;
   let personsCreated = 0;
 
-  for (const canonical of result.memberships) {
-    const plan = mapCanonicalMembership(ctx.clubId, canonical);
-
+  for (let index = 0; index < result.memberships.length; index += BATCH_SIZE) {
+    const canonicalBatch = result.memberships.slice(index, index + BATCH_SIZE);
+    const plans = canonicalBatch.map((canonical) => mapCanonicalMembership(ctx.clubId, canonical));
     try {
-      await prisma.$transaction(async (tx) => {
-        const membership = await tx.membership.create({ data: plan.membership });
+      await createPlans(prisma, plans);
+      membershipsCreated += plans.length;
+      personsCreated += plans.reduce((sum, plan) => sum + plan.persons.length, 0);
+      continue;
+    } catch {
+      // A batch failure falls back to isolated household transactions so one
+      // malformed row never prevents the rest of the upload from loading.
+    }
 
-        await tx.person.createMany({
-          data: plan.persons.map((person) => ({
-            ...person,
-            membershipId: membership.id
-          }))
-        });
-      });
+    for (const [batchIndex, plan] of plans.entries()) {
+      const canonical = canonicalBatch[batchIndex]!;
+      try {
+        await createSinglePlan(prisma, plan);
+        membershipsCreated += 1;
+        personsCreated += plan.persons.length;
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+          warnings.push(`Skipped ${canonical.accountHolderName}: a unique membership value already exists.`);
+          continue;
+        }
 
-      membershipsCreated += 1;
-      personsCreated += plan.persons.length;
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        warnings.push(
-          `Skipped ${canonical.accountHolderName}: external order ID ${canonical.orderId ?? "unknown"} already exists.`
-        );
-        continue;
+        warnings.push(`Skipped ${canonical.accountHolderName}: ${errorMessage(error)}`);
       }
-
-      warnings.push(`Skipped ${canonical.accountHolderName}: ${errorMessage(error)}`);
     }
   }
 

@@ -13,6 +13,9 @@ import { AdminActivity } from "./pages/AdminActivity";
 import { AdminStaff } from "./pages/AdminStaff";
 import { AdminWebhooks } from "./pages/AdminWebhooks";
 import { Dashboard } from "./pages/Dashboard";
+import { Demo } from "./pages/Demo";
+import { DemoDashboard } from "./pages/DemoDashboard";
+import { Landing } from "./pages/Landing";
 import { Login } from "./pages/Login";
 import { Members } from "./pages/Members";
 
@@ -75,6 +78,9 @@ function App() {
           <LazyMotion features={domAnimation} strict>
             <BrowserRouter>
               <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route path="/demo" element={<Demo />} />
+                <Route path="/demo/:clubId/dashboard" element={<DemoDashboard />} />
                 <Route path="/login" element={<Login />} />
                 <Route
                   element={

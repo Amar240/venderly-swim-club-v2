@@ -175,8 +175,9 @@ export const ingestTable = (headers: string[], rows: string[][]): IngestResult =
 };
 
 export const ingestCsv = (text: string): IngestResult => {
-  const { headers, rows } = parseCsv(text);
-  return ingestTable(headers, rows);
+  const { headers, rows, warnings } = parseCsv(text);
+  const result = ingestTable(headers, rows);
+  return { ...result, warnings: [...warnings, ...result.warnings] };
 };
 
 export const ingestFile = (input: Buffer | string, filename: string): IngestResult => {
@@ -192,8 +193,9 @@ export const ingestFile = (input: Buffer | string, filename: string): IngestResu
       throw new Error("Excel ingestion requires a file buffer.");
     }
 
-    const { headers, rows } = parseXlsx(input);
-    return ingestTable(headers, rows);
+    const { headers, rows, warnings } = parseXlsx(input);
+    const result = ingestTable(headers, rows);
+    return { ...result, warnings: [...warnings, ...result.warnings] };
   }
 
   if (extension === "numbers") {

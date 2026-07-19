@@ -1,5 +1,8 @@
 import { execSync } from "node:child_process";
-import "dotenv/config";
+import dotenv from "dotenv";
+
+dotenv.config({ path: ".env.local" });
+dotenv.config();
 
 /** Runs once before the integration suite: applies migrations to swimclub_test. */
 export default function globalSetup(): void {
