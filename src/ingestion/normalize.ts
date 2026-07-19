@@ -1,4 +1,11 @@
-import { inferMapping } from "./mapping";
+import {
+  applyMappingOverrides,
+  buildMappingReview,
+  inferMapping,
+  type MappingOverride,
+  type MappingPlan,
+  type MappingReviewEntry
+} from "./mapping";
 import { parseCsv, parseXlsx } from "./parse";
 import { profileColumns } from "./profile";
 import type { ScalarTargetField } from "./synonyms";
@@ -15,6 +22,27 @@ import {
   type RowRecord
 } from "./transforms";
 import { canonicalMembershipSchema, type CanonicalMembership, type IngestResult } from "./types";
+
+export type IngestStats = {
+  totalRows: number;
+  membershipsFound: number;
+  peopleFound: number;
+  validCount: number;
+  invalidCount: number;
+};
+
+export type IngestAnalysis = {
+  result: IngestResult;
+  mapping: MappingReviewEntry[];
+  mappingPlan: MappingPlan;
+  stats: IngestStats;
+};
+
+type ParsedIngestFile = {
+  headers: string[];
+  rows: string[][];
+  warnings: string[];
+};
 
 const toRecords = (headers: string[], rows: string[][]): RowRecord[] =>
   rows.map((row) =>
@@ -101,15 +129,18 @@ const validateMembership = (
   return null;
 };
 
-export const ingestTable = (headers: string[], rows: string[][]): IngestResult => {
-  const profiles = profileColumns(headers, rows);
-  const mapping = inferMapping(headers, rows, profiles);
+const transformTable = (
+  headers: string[],
+  rows: string[][],
+  mapping: MappingPlan
+): { result: IngestResult; candidateCount: number } => {
   const records = toRecords(headers, rows);
   const warnings: string[] = [];
   const memberships: CanonicalMembership[] = [];
 
   if (mapping.longGrouping) {
-    for (const group of groupPeopleLong(records, mapping.longGrouping)) {
+    const groupedMemberships = groupPeopleLong(records, mapping.longGrouping);
+    for (const group of groupedMemberships) {
       const primary = group.primaryRow;
       const accountHolderName = get(primary, mapping.longGrouping.nameColumn);
       const scalar = {
@@ -133,9 +164,12 @@ export const ingestTable = (headers: string[], rows: string[][]): IngestResult =
     }
 
     return {
-      memberships,
-      droppedColumns: mapping.droppedColumns,
-      warnings
+      result: {
+        memberships,
+        droppedColumns: mapping.droppedColumns,
+        warnings
+      },
+      candidateCount: groupedMemberships.length
     };
   }
 
@@ -168,24 +202,54 @@ export const ingestTable = (headers: string[], rows: string[][]): IngestResult =
   });
 
   return {
-    memberships,
-    droppedColumns: mapping.droppedColumns,
-    warnings
+    result: {
+      memberships,
+      droppedColumns: mapping.droppedColumns,
+      warnings
+    },
+    candidateCount: records.length
   };
 };
 
-export const ingestCsv = (text: string): IngestResult => {
-  const { headers, rows, warnings } = parseCsv(text);
-  const result = ingestTable(headers, rows);
-  return { ...result, warnings: [...warnings, ...result.warnings] };
+export const analyzeTable = (
+  headers: string[],
+  rows: string[][],
+  overrides: MappingOverride[] = []
+): IngestAnalysis => {
+  const profiles = profileColumns(headers, rows);
+  const inferred = inferMapping(headers, rows, profiles);
+  const mappingPlan = overrides.length > 0
+    ? applyMappingOverrides(inferred, headers, overrides)
+    : inferred;
+  const transformed = transformTable(headers, rows, mappingPlan);
+  const validCount = transformed.result.memberships.length;
+
+  return {
+    result: transformed.result,
+    mapping: buildMappingReview(headers, rows, mappingPlan),
+    mappingPlan,
+    stats: {
+      totalRows: rows.length,
+      membershipsFound: validCount,
+      peopleFound: transformed.result.memberships.reduce(
+        (sum, membership) => sum + membership.persons.length,
+        0
+      ),
+      validCount,
+      invalidCount: Math.max(0, transformed.candidateCount - validCount)
+    }
+  };
 };
 
-export const ingestFile = (input: Buffer | string, filename: string): IngestResult => {
+export const ingestTable = (headers: string[], rows: string[][]): IngestResult =>
+  analyzeTable(headers, rows).result;
+
+export const parseIngestFile = (input: Buffer | string, filename: string): ParsedIngestFile => {
   const extension = filename.toLowerCase().split(".").pop() ?? "";
 
   if (extension === "csv") {
     const text = Buffer.isBuffer(input) ? input.toString("utf8") : input;
-    return ingestCsv(text);
+    return parseCsv(text);
   }
 
   if (extension === "xlsx" || extension === "xls") {
@@ -193,9 +257,7 @@ export const ingestFile = (input: Buffer | string, filename: string): IngestResu
       throw new Error("Excel ingestion requires a file buffer.");
     }
 
-    const { headers, rows, warnings } = parseXlsx(input);
-    const result = ingestTable(headers, rows);
-    return { ...result, warnings: [...warnings, ...result.warnings] };
+    return parseXlsx(input);
   }
 
   if (extension === "numbers") {
@@ -204,3 +266,29 @@ export const ingestFile = (input: Buffer | string, filename: string): IngestResu
 
   throw new Error("Unsupported file type. Please upload a CSV or Excel (.xlsx/.xls) file.");
 };
+
+export const analyzeIngestFile = (
+  input: Buffer | string,
+  filename: string,
+  overrides: MappingOverride[] = []
+): IngestAnalysis => {
+  const parsed = parseIngestFile(input, filename);
+  const analysis = analyzeTable(parsed.headers, parsed.rows, overrides);
+  return {
+    ...analysis,
+    result: {
+      ...analysis.result,
+      warnings: [...parsed.warnings, ...analysis.result.warnings]
+    }
+  };
+};
+
+export const ingestCsv = (text: string): IngestResult => {
+  return analyzeIngestFile(text, "input.csv").result;
+};
+
+export const ingestFile = (
+  input: Buffer | string,
+  filename: string,
+  overrides: MappingOverride[] = []
+): IngestResult => analyzeIngestFile(input, filename, overrides).result;

@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
 import multer from "multer";
 import { z } from "zod";
-import { ingestFile } from "../ingestion/normalize";
+import { analyzeIngestFile, ingestFile } from "../ingestion/normalize";
+import {
+  EDITABLE_MAPPING_TARGETS,
+  type MappingOverride
+} from "../ingestion/mapping";
 import type { IngestResult } from "../ingestion/types";
 import { loadIngestResult } from "../ingestion/load";
 import { logger } from "../lib/logger";
@@ -22,6 +26,11 @@ const startDemoSchema = z.object({
 const clubParamsSchema = z.object({
   clubId: z.string().uuid()
 });
+
+const mappingOverridesSchema = z.array(z.object({
+  sourceColumn: z.string().min(1),
+  targetField: z.enum(EDITABLE_MAPPING_TARGETS).nullable()
+}));
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const configuredRetentionDays = Number.parseInt(process.env.DEMO_RETENTION_DAYS ?? "7", 10);
@@ -50,6 +59,49 @@ const slugify = (name: string): string => {
 };
 
 const getExtension = (filename: string): string => filename.toLowerCase().split(".").pop() ?? "";
+
+const validateSpreadsheetFormat = (filename: string): string => {
+  const detectedFormat = getExtension(filename);
+  const spreadsheetFormats = new Set(["csv", "xlsx", "xls"]);
+
+  if (!spreadsheetFormats.has(detectedFormat) && detectedFormat !== "numbers") {
+    throw new HttpError(400, "UNSUPPORTED_FILE_TYPE", "Please upload a CSV or Excel spreadsheet");
+  }
+
+  return detectedFormat;
+};
+
+const parseMappingOverrides = (value: unknown): MappingOverride[] => {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (typeof value !== "string") {
+    throw new HttpError(400, "INVALID_MAPPING_OVERRIDES", "Mapping changes must be valid JSON");
+  }
+
+  try {
+    return mappingOverridesSchema.parse(JSON.parse(value));
+  } catch {
+    throw new HttpError(400, "INVALID_MAPPING_OVERRIDES", "Mapping changes are invalid");
+  }
+};
+
+const receiveDemoFile: RequestHandler = (req, res, next) => {
+  upload.single("file")(req, res, (error: unknown) => {
+    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+      next(new HttpError(400, "FILE_TOO_LARGE", "File must be 10 MB or smaller"));
+      return;
+    }
+
+    if (error) {
+      next(new HttpError(400, "INVALID_UPLOAD", "The uploaded file could not be read"));
+      return;
+    }
+
+    next();
+  });
+};
 
 const persistFailedJob = async (input: {
   clubId: string;
@@ -101,6 +153,7 @@ const ingestAndLoadDemo = async (input: {
   buffer: Buffer;
   filename: string;
   detectedFormat: string;
+  mappingOverrides?: MappingOverride[];
 }): Promise<
   | {
       status: 200;
@@ -118,7 +171,7 @@ const ingestAndLoadDemo = async (input: {
   let result: IngestResult;
 
   try {
-    result = ingestFile(input.buffer, input.filename);
+    result = ingestFile(input.buffer, input.filename, input.mappingOverrides);
   } catch (error) {
     const message = error instanceof Error ? error.message : "The spreadsheet could not be parsed";
     await persistFailedJob({
@@ -287,23 +340,39 @@ demoRouter.post("/start", startRateLimit, async (req, res, next) => {
   }
 });
 
-demoRouter.post("/:clubId/upload", uploadRateLimit, (req, res, next) => {
-  upload.single("file")(req, res, (error: unknown) => {
-    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
-      next(new HttpError(400, "FILE_TOO_LARGE", "File must be 10 MB or smaller"));
-      return;
+demoRouter.post("/:clubId/preview", uploadRateLimit, receiveDemoFile, async (req, res, next) => {
+  try {
+    const { clubId } = clubParamsSchema.parse(req.params);
+    const file = req.file;
+
+    if (!file) {
+      throw new HttpError(400, "FILE_REQUIRED", "A spreadsheet file is required");
     }
 
-    if (error) {
-      next(new HttpError(400, "INVALID_UPLOAD", "The uploaded file could not be read"));
-      return;
+    await assertUsableDemoClub(clubId);
+    validateSpreadsheetFormat(file.originalname);
+
+    let analysis: ReturnType<typeof analyzeIngestFile>;
+    try {
+      analysis = analyzeIngestFile(file.buffer, file.originalname);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The spreadsheet could not be parsed";
+      throw new HttpError(400, "INGESTION_FAILED", message);
     }
 
-    next();
-  });
+    res.json({
+      mapping: analysis.mapping,
+      droppedColumns: analysis.result.droppedColumns,
+      stats: analysis.stats,
+      sampleMemberships: analysis.result.memberships.slice(0, 3),
+      warnings: analysis.result.warnings
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
-demoRouter.post("/:clubId/upload", async (req, res, next) => {
+demoRouter.post("/:clubId/upload", uploadRateLimit, receiveDemoFile, async (req, res, next) => {
   try {
     const { clubId } = clubParamsSchema.parse(req.params);
     const file = req.file;
@@ -314,18 +383,15 @@ demoRouter.post("/:clubId/upload", async (req, res, next) => {
 
     await assertUsableDemoClub(clubId);
 
-    const detectedFormat = getExtension(file.originalname);
-    const spreadsheetFormats = new Set(["csv", "xlsx", "xls"]);
-
-    if (!spreadsheetFormats.has(detectedFormat) && detectedFormat !== "numbers") {
-      throw new HttpError(400, "UNSUPPORTED_FILE_TYPE", "Please upload a CSV or Excel spreadsheet");
-    }
+    const detectedFormat = validateSpreadsheetFormat(file.originalname);
+    const mappingOverrides = parseMappingOverrides(req.body?.mappingOverrides);
 
     const outcome = await ingestAndLoadDemo({
       clubId,
       buffer: file.buffer,
       filename: file.originalname,
-      detectedFormat
+      detectedFormat,
+      mappingOverrides
     });
     res.status(outcome.status).json(outcome.body);
   } catch (error) {

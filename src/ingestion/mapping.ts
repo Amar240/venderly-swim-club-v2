@@ -33,6 +33,35 @@ export type MappingPlan = {
   splitName?: { firstColumn: string; lastColumn: string };
   combinedAddressColumn?: string;
   droppedColumns: string[];
+  manualOverrides?: Record<string, EditableMappingTarget | null>;
+};
+
+export const EDITABLE_MAPPING_TARGETS = [
+  "accountHolderName",
+  "memberCount",
+  "guestPasses",
+  "paymentAmount"
+] as const;
+
+export type EditableMappingTarget = (typeof EDITABLE_MAPPING_TARGETS)[number];
+
+export type MappingOverride = {
+  sourceColumn: string;
+  targetField: EditableMappingTarget | null;
+};
+
+export type MappingReviewMethod = "fuzzy" | "structural" | "manual";
+
+export type MappingReviewEntry = {
+  sourceColumn: string;
+  targetField: ScalarTargetField | string | null;
+  confidence: number;
+  method: MappingReviewMethod;
+  sampleValues: string[];
+  editable: boolean;
+  groupKey?: string;
+  groupLabel?: string;
+  canToggleGroup?: boolean;
 };
 
 const KNOWN_JUNK_HEADERS = new Set([
@@ -234,3 +263,249 @@ export const inferMapping = (headers: string[], rows: string[][], profiles: Colu
     droppedColumns: [...droppedColumns]
   };
 };
+
+const cloneMappingPlan = (plan: MappingPlan): MappingPlan => ({
+  scalar: { ...plan.scalar },
+  actions: plan.actions.map((action) => ({ ...action })),
+  wideMemberGroups: plan.wideMemberGroups.map((group) => ({ ...group })),
+  ...(plan.longGrouping ? { longGrouping: { ...plan.longGrouping } } : {}),
+  ...(plan.combinedPeopleColumn ? { combinedPeopleColumn: plan.combinedPeopleColumn } : {}),
+  ...(plan.splitName ? { splitName: { ...plan.splitName } } : {}),
+  ...(plan.combinedAddressColumn ? { combinedAddressColumn: plan.combinedAddressColumn } : {}),
+  droppedColumns: [...plan.droppedColumns],
+  manualOverrides: { ...plan.manualOverrides }
+});
+
+const scalarTargetForSource = (plan: MappingPlan, sourceColumn: string): ScalarTargetField | undefined =>
+  (Object.entries(plan.scalar) as Array<[ScalarTargetField, string]>).find(([, source]) => source === sourceColumn)?.[0];
+
+const isFamilySource = (plan: MappingPlan, sourceColumn: string): boolean => {
+  const isWide = plan.wideMemberGroups.some((group) =>
+    [group.nameColumn, group.ageColumn, group.phoneColumn].includes(sourceColumn)
+  );
+  const long = plan.longGrouping;
+  const isLong = long
+    ? [
+        long.groupIdColumn,
+        long.nameColumn,
+        long.isPrimaryColumn,
+        long.ageColumn,
+        long.phoneColumn
+      ].includes(sourceColumn)
+    : false;
+
+  return isWide || isLong || plan.combinedPeopleColumn === sourceColumn;
+};
+
+const isReadOnlyDetectedSource = (plan: MappingPlan, sourceColumn: string): boolean => {
+  const scalarTarget = scalarTargetForSource(plan, sourceColumn);
+
+  if (scalarTarget && !EDITABLE_MAPPING_TARGETS.includes(scalarTarget as EditableMappingTarget)) {
+    return true;
+  }
+
+  return Boolean(
+    plan.splitName && [plan.splitName.firstColumn, plan.splitName.lastColumn].includes(sourceColumn)
+  ) || plan.combinedAddressColumn === sourceColumn || plan.droppedColumns.includes(sourceColumn);
+};
+
+const removeScalarSource = (plan: MappingPlan, sourceColumn: string): void => {
+  for (const [target, source] of Object.entries(plan.scalar) as Array<[ScalarTargetField, string]>) {
+    if (source === sourceColumn) {
+      delete plan.scalar[target];
+    }
+  }
+};
+
+const disableFamilyStructure = (plan: MappingPlan, sourceColumn: string): void => {
+  if (plan.wideMemberGroups.some((group) =>
+    [group.nameColumn, group.ageColumn, group.phoneColumn].includes(sourceColumn)
+  )) {
+    plan.wideMemberGroups = [];
+  }
+
+  if (plan.longGrouping && [
+    plan.longGrouping.groupIdColumn,
+    plan.longGrouping.nameColumn,
+    plan.longGrouping.isPrimaryColumn,
+    plan.longGrouping.ageColumn,
+    plan.longGrouping.phoneColumn
+  ].includes(sourceColumn)) {
+    delete plan.longGrouping;
+  }
+
+  if (plan.combinedPeopleColumn === sourceColumn) {
+    delete plan.combinedPeopleColumn;
+  }
+};
+
+export const applyMappingOverrides = (
+  plan: MappingPlan,
+  headers: string[],
+  overrides: MappingOverride[]
+): MappingPlan => {
+  const next = cloneMappingPlan(plan);
+
+  for (const override of overrides) {
+    if (!headers.includes(override.sourceColumn)) {
+      throw new Error(`Unknown source column: ${override.sourceColumn}`);
+    }
+
+    const originalScalarTarget = scalarTargetForSource(plan, override.sourceColumn);
+    const sourceIsEditableScalar = originalScalarTarget
+      ? EDITABLE_MAPPING_TARGETS.includes(originalScalarTarget as EditableMappingTarget)
+      : false;
+    const sourceIsFamily = isFamilySource(plan, override.sourceColumn);
+    const sourceIsUnmapped = !originalScalarTarget && !sourceIsFamily && !isReadOnlyDetectedSource(plan, override.sourceColumn);
+
+    if (isReadOnlyDetectedSource(plan, override.sourceColumn)) {
+      throw new Error(`Column cannot be changed in the demo: ${override.sourceColumn}`);
+    }
+
+    if (sourceIsFamily && override.targetField !== null) {
+      throw new Error(`Family structure can only be included or ignored: ${override.sourceColumn}`);
+    }
+
+    if (!sourceIsEditableScalar && !sourceIsFamily && !sourceIsUnmapped) {
+      throw new Error(`Column cannot be changed in the demo: ${override.sourceColumn}`);
+    }
+
+    removeScalarSource(next, override.sourceColumn);
+    next.droppedColumns = next.droppedColumns.filter((column) => column !== override.sourceColumn);
+
+    if (sourceIsFamily) {
+      disableFamilyStructure(next, override.sourceColumn);
+    }
+
+    if (override.targetField) {
+      const displacedSource = next.scalar[override.targetField];
+      if (displacedSource && displacedSource !== override.sourceColumn) {
+        removeScalarSource(next, displacedSource);
+        next.droppedColumns = [...new Set([...next.droppedColumns, displacedSource])];
+        next.manualOverrides![displacedSource] = null;
+      }
+      next.scalar[override.targetField] = override.sourceColumn;
+    } else {
+      next.droppedColumns = [...new Set([...next.droppedColumns, override.sourceColumn])];
+    }
+
+    next.manualOverrides![override.sourceColumn] = override.targetField;
+  }
+
+  return next;
+};
+
+const distinctSamples = (rows: string[][], columnIndex: number): string[] => {
+  const samples = new Set<string>();
+
+  for (const row of rows) {
+    const value = row[columnIndex]?.trim();
+    if (value) {
+      samples.add(value);
+    }
+    if (samples.size === 3) {
+      break;
+    }
+  }
+
+  return [...samples];
+};
+
+const structuralTarget = (
+  plan: MappingPlan,
+  sourceColumn: string
+): Pick<MappingReviewEntry, "targetField" | "groupKey" | "groupLabel" | "canToggleGroup"> | null => {
+  for (const group of plan.wideMemberGroups) {
+    if ([group.nameColumn, group.ageColumn, group.phoneColumn].includes(sourceColumn)) {
+      const fields = [group.nameColumn, group.ageColumn, group.phoneColumn].filter(Boolean).length;
+      return {
+        targetField: sourceColumn === group.nameColumn
+          ? "familyMemberName"
+          : sourceColumn === group.ageColumn
+            ? "familyMemberAge"
+            : "familyMemberPhone",
+        groupKey: "family-wide",
+        groupLabel: `Members 1 to ${plan.wideMemberGroups.length}, ${fields > 1 ? "names and details" : "names"}`,
+        canToggleGroup: true
+      };
+    }
+  }
+
+  if (plan.longGrouping) {
+    const longFields: Array<[string | undefined, string]> = [
+      [plan.longGrouping.groupIdColumn, "householdId"],
+      [plan.longGrouping.nameColumn, "familyMemberName"],
+      [plan.longGrouping.isPrimaryColumn, "primaryMemberMarker"],
+      [plan.longGrouping.ageColumn, "familyMemberAge"],
+      [plan.longGrouping.phoneColumn, "familyMemberPhone"]
+    ];
+    const match = longFields.find(([source]) => source === sourceColumn);
+    if (match) {
+      return {
+        targetField: match[1],
+        groupKey: "family-long",
+        groupLabel: "Household rows detected as grouped family members",
+        canToggleGroup: true
+      };
+    }
+  }
+
+  if (plan.combinedPeopleColumn === sourceColumn) {
+    return {
+      targetField: "familyMembers",
+      groupKey: "family-combined",
+      groupLabel: "Family members detected in one combined column",
+      canToggleGroup: true
+    };
+  }
+
+  if (plan.splitName && [plan.splitName.firstColumn, plan.splitName.lastColumn].includes(sourceColumn)) {
+    return {
+      targetField: "accountHolderNamePart",
+      groupKey: "holder-split-name",
+      groupLabel: "Account holder name detected from first and last name",
+      canToggleGroup: false
+    };
+  }
+
+  if (plan.combinedAddressColumn === sourceColumn) {
+    return {
+      targetField: "combinedAddress",
+      groupKey: "combined-address",
+      groupLabel: "Combined address detected, not stored in this demo",
+      canToggleGroup: false
+    };
+  }
+
+  return null;
+};
+
+export const buildMappingReview = (
+  headers: string[],
+  rows: string[][],
+  plan: MappingPlan
+): MappingReviewEntry[] =>
+  headers.map((sourceColumn, columnIndex) => {
+    const manualTarget = plan.manualOverrides?.[sourceColumn];
+    const scalarTarget = scalarTargetForSource(plan, sourceColumn);
+    const structural = structuralTarget(plan, sourceColumn);
+    const dropped = plan.droppedColumns.includes(sourceColumn);
+    const targetField = manualTarget !== undefined
+      ? manualTarget
+      : scalarTarget ?? structural?.targetField ?? null;
+    const editable = Boolean(
+      scalarTarget && EDITABLE_MAPPING_TARGETS.includes(scalarTarget as EditableMappingTarget)
+    ) || (!scalarTarget && !structural && !dropped);
+
+    return {
+      sourceColumn,
+      targetField,
+      confidence: manualTarget !== undefined ? 1 : targetField === null && !dropped ? 0 : 1,
+      method: manualTarget !== undefined ? "manual" : scalarTarget ? "fuzzy" : "structural",
+      sampleValues: distinctSamples(rows, columnIndex),
+      editable,
+      ...(structural?.groupKey ? { groupKey: structural.groupKey } : {}),
+      ...(structural?.groupLabel ? { groupLabel: structural.groupLabel } : {}),
+      ...(structural?.canToggleGroup !== undefined ? { canToggleGroup: structural.canToggleGroup } : {})
+    };
+  });

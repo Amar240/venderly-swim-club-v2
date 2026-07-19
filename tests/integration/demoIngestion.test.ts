@@ -80,6 +80,71 @@ describe("demo ingestion (integration)", () => {
     expect(prospect.expiresAt.getTime()).toBeGreaterThan(Date.now());
   });
 
+  it("previews inferred mappings without persisting member data", async () => {
+    const app = await getTestApp();
+    const start = await startDemo();
+
+    const preview = await request(app)
+      .post(`/api/v1/demo/${start.body.demoClubId}/preview`)
+      .attach("file", fixturePath)
+      .expect(200);
+
+    expect(preview.body.stats).toEqual({
+      totalRows: 40,
+      membershipsFound: 40,
+      peopleFound: 139,
+      validCount: 40,
+      invalidCount: 0
+    });
+    expect(preview.body.sampleMemberships).toHaveLength(3);
+    expect(preview.body.mapping).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceColumn: "Your Full Name",
+        targetField: "accountHolderName",
+        method: "fuzzy",
+        sampleValues: expect.arrayContaining(["Caleb Lewis"])
+      }),
+      expect.objectContaining({
+        sourceColumn: "1st Member Full Name",
+        targetField: "familyMemberName",
+        method: "structural",
+        groupKey: "family-wide"
+      })
+    ]));
+    expect(await prisma.membership.count({ where: { clubId: start.body.demoClubId } })).toBe(0);
+    expect(await prisma.person.count({ where: { clubId: start.body.demoClubId } })).toBe(0);
+    expect(await prisma.ingestionJob.count({ where: { clubId: start.body.demoClubId } })).toBe(0);
+  });
+
+  it("loads a confirmed upload with a corrected scalar mapping", async () => {
+    const app = await getTestApp();
+    const start = await startDemo();
+    const csv = [
+      "Your Full Name,Your Phone,Your Email,Select the # of Members for your Membership,Mystery Balance",
+      "Ada Lovelace,3025551212,ada@example.com,1,7"
+    ].join("\n");
+
+    const upload = await request(app)
+      .post(`/api/v1/demo/${start.body.demoClubId}/upload`)
+      .field("mappingOverrides", JSON.stringify([
+        { sourceColumn: "Mystery Balance", targetField: "guestPasses" }
+      ]))
+      .attach("file", Buffer.from(csv), "custom.csv")
+      .expect(200);
+
+    expect(upload.body).toMatchObject({ membershipsCreated: 1, personsCreated: 1 });
+
+    const overview = await request(app)
+      .get(`/api/v1/demo/${start.body.demoClubId}/overview`)
+      .expect(200);
+
+    expect(overview.body.summary.guestPasses).toBe(7);
+    expect(overview.body.memberships[0]).toMatchObject({
+      accountHolderName: "Ada Lovelace",
+      guestPassesTotal: 7
+    });
+  });
+
   it("returns a public overview for a loaded demo club", async () => {
     const app = await getTestApp();
     const start = await startDemo();

@@ -8,6 +8,7 @@ import {
   FileSpreadsheet,
   Loader2,
   Sparkles,
+  TableProperties,
   Upload
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -45,6 +46,54 @@ type UploadResponse = {
 };
 
 type DemoSource = "upload" | "sample";
+type EditableMappingTarget = "accountHolderName" | "memberCount" | "guestPasses" | "paymentAmount";
+
+type MappingMethod = "fuzzy" | "structural" | "manual";
+
+type MappingEntry = {
+  sourceColumn: string;
+  targetField: string | null;
+  confidence: number;
+  method: MappingMethod;
+  sampleValues: string[];
+  editable: boolean;
+  groupKey?: string;
+  groupLabel?: string;
+  canToggleGroup?: boolean;
+};
+
+type PreviewPerson = {
+  fullName: string;
+  isPrimary: boolean;
+  age?: number | null;
+};
+
+type PreviewMembership = {
+  accountHolderName: string;
+  memberCount: number;
+  guestPasses?: number | null;
+  paymentAmount?: number;
+  persons: PreviewPerson[];
+};
+
+type PreviewResponse = {
+  mapping: MappingEntry[];
+  droppedColumns: string[];
+  stats: {
+    totalRows: number;
+    membershipsFound: number;
+    peopleFound: number;
+    validCount: number;
+    invalidCount: number;
+  };
+  sampleMemberships: PreviewMembership[];
+  warnings: string[];
+};
+
+type MappingOverride = {
+  sourceColumn: string;
+  targetField: EditableMappingTarget | null;
+};
 
 type ErrorEnvelope = {
   error?: {
@@ -56,7 +105,15 @@ type ErrorEnvelope = {
 
 type DemoView =
   | { status: "start" }
-  | { status: "loading"; source: DemoSource }
+  | { status: "loading"; source: DemoSource | "preview" | "confirm" }
+  | {
+      status: "review";
+      clubId: string;
+      preview: PreviewResponse;
+      selections: Record<string, EditableMappingTarget | null>;
+      disabledGroups: string[];
+      confirmError?: { message: string; warnings: string[] };
+    }
   | { status: "success"; clubId: string; result: UploadResponse & { isSample: boolean } }
   | {
       status: "error";
@@ -65,6 +122,43 @@ type DemoView =
       message: string;
       warnings: string[];
     };
+
+const EDITABLE_TARGET_OPTIONS: Array<{ value: EditableMappingTarget; label: string }> = [
+  { value: "accountHolderName", label: "Account holder name" },
+  { value: "memberCount", label: "Member count" },
+  { value: "guestPasses", label: "Guest passes" },
+  { value: "paymentAmount", label: "Payment amount for tier" }
+];
+
+const TARGET_LABELS: Record<string, string> = {
+  accountHolderName: "Account holder name",
+  email: "Email",
+  phone: "Phone",
+  streetAddress: "Street address",
+  city: "City",
+  postalCode: "Postal code",
+  state: "State",
+  country: "Country",
+  memberCount: "Member count",
+  guestPasses: "Guest passes",
+  paymentAmount: "Payment amount for tier",
+  orderId: "Order ID",
+  submittedAt: "Submitted date",
+  medicalNotes: "Medical notes",
+  combinedAddress: "Combined address",
+  accountHolderNamePart: "Account holder name"
+};
+
+const isEditableTarget = (value: string | null): value is EditableMappingTarget =>
+  EDITABLE_TARGET_OPTIONS.some((option) => option.value === value);
+
+const initialSelections = (preview: PreviewResponse): Record<string, EditableMappingTarget | null> =>
+  preview.mapping.reduce<Record<string, EditableMappingTarget | null>>((selections, entry) => {
+    if (entry.editable) {
+      selections[entry.sourceColumn] = isEditableTarget(entry.targetField) ? entry.targetField : null;
+    }
+    return selections;
+  }, {});
 
 const fileExtension = (file: File): string => file.name.toLowerCase().split(".").pop() ?? "";
 
@@ -90,6 +184,226 @@ const formatFileSize = (bytes: number): string => {
   }
 
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+type ReviewView = Extract<DemoView, { status: "review" }>;
+
+const MappingBadge = ({ method, changed = false }: { method: MappingMethod; changed?: boolean }) => (
+  <span className={`vld-mapping-badge vld-mapping-badge-${changed ? "manual" : method}`}>
+    {changed ? "Manual" : method === "fuzzy" ? "Automatic" : "Structure"}
+  </span>
+);
+
+const SampleValues = ({ values }: { values: string[] }) => (
+  <div className="vld-mapping-samples">
+    {values.length > 0
+      ? values.map((value) => <span key={value}>{value}</span>)
+      : <span>Empty column</span>}
+  </div>
+);
+
+const MappingReview = ({
+  review,
+  onSelectionChange,
+  onToggleGroup,
+  onBack,
+  onConfirm
+}: {
+  review: ReviewView;
+  onSelectionChange: (sourceColumn: string, targetField: EditableMappingTarget | null) => void;
+  onToggleGroup: (groupKey: string) => void;
+  onBack: () => void;
+  onConfirm: () => void;
+}) => {
+  const familyGroups = new Map<string, MappingEntry[]>();
+  for (const entry of review.preview.mapping) {
+    if (entry.groupKey && entry.canToggleGroup) {
+      familyGroups.set(entry.groupKey, [...(familyGroups.get(entry.groupKey) ?? []), entry]);
+    }
+  }
+  const regularEntries = review.preview.mapping.filter(
+    (entry) => !(entry.groupKey && entry.canToggleGroup)
+  );
+
+  return (
+    <m.section
+      className="vld-demo-card vld-review-card"
+      key="review"
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      transition={{ duration: 0.25 }}
+    >
+      <div className="vld-review-heading">
+        <span className="vld-eyebrow"><TableProperties aria-hidden="true" /> Mapping review</span>
+        <h1>Check what we understood.</h1>
+        <p>
+          We found <b>{review.preview.stats.membershipsFound} memberships</b> and{" "}
+          <b>{review.preview.stats.peopleFound} people</b> across {review.preview.stats.totalRows} rows.
+        </p>
+        <p className="vld-review-privacy">
+          We read your whole file. Only fields marked editable change what you see, and we do not store member
+          contact or payment details in the demo.
+        </p>
+      </div>
+
+      {review.confirmError ? (
+        <div className="vld-review-error" role="alert">
+          <AlertCircle aria-hidden="true" />
+          <div>
+            <b>We could not load this mapping.</b>
+            <p>{review.confirmError.message}</p>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="vld-mapping-table-wrap">
+        <table className="vld-mapping-table">
+          <thead>
+            <tr>
+              <th>Source column</th>
+              <th>Sample values</th>
+              <th>Read as</th>
+              <th>Method</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...familyGroups.entries()].map(([groupKey, entries]) => {
+              const disabled = review.disabledGroups.includes(groupKey);
+              const samples = entries.flatMap((entry) => entry.sampleValues).filter(Boolean).slice(0, 3);
+              return (
+                <tr key={groupKey} className="vld-family-mapping-row">
+                  <td>
+                    <b>{entries[0]?.groupLabel ?? "Family members"}</b>
+                    <small>{entries.length} related columns</small>
+                  </td>
+                  <td><SampleValues values={samples} /></td>
+                  <td>
+                    <label className="vld-family-toggle">
+                      <input
+                        type="checkbox"
+                        checked={!disabled}
+                        onChange={() => onToggleGroup(groupKey)}
+                      />
+                      <span>{disabled ? "Excluded" : "Include family members"}</span>
+                    </label>
+                  </td>
+                  <td><MappingBadge method="structural" changed={disabled} /></td>
+                </tr>
+              );
+            })}
+            {regularEntries.map((entry) => {
+              const selected = review.selections[entry.sourceColumn] ?? null;
+              const original = isEditableTarget(entry.targetField) ? entry.targetField : null;
+              const changed = entry.editable && selected !== original;
+              return (
+                <tr key={entry.sourceColumn}>
+                  <td><b>{entry.sourceColumn || "Unnamed column"}</b></td>
+                  <td><SampleValues values={entry.sampleValues} /></td>
+                  <td>
+                    {entry.editable ? (
+                      <select
+                        value={selected ?? ""}
+                        aria-label={`Map ${entry.sourceColumn}`}
+                        onChange={(event) => onSelectionChange(
+                          entry.sourceColumn,
+                          event.target.value ? event.target.value as EditableMappingTarget : null
+                        )}
+                      >
+                        <option value="">Ignore this column</option>
+                        {EDITABLE_TARGET_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    ) : entry.targetField ? (
+                      <div className="vld-readonly-mapping">
+                        <b>{TARGET_LABELS[entry.targetField] ?? entry.groupLabel ?? "Detected field"}</b>
+                        <small>
+                          {entry.targetField === "accountHolderNamePart"
+                            ? "Used to build the account holder name"
+                            : "Detected, not stored in this demo"}
+                        </small>
+                      </div>
+                    ) : (
+                      <span className="vld-ignored-mapping">Ignored automatically</span>
+                    )}
+                  </td>
+                  <td><MappingBadge method={entry.method} changed={changed} /></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {review.preview.warnings.length > 0 || (review.confirmError?.warnings.length ?? 0) > 0 ? (
+        <details className="vld-warning-list">
+          <summary>
+            {review.preview.warnings.length + (review.confirmError?.warnings.length ?? 0)} rows needed attention
+          </summary>
+          <ul>
+            {[...review.preview.warnings, ...(review.confirmError?.warnings ?? [])].map((warning, index) => (
+              <li key={`${index}-${warning}`}>{warning}</li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+
+      {review.preview.sampleMemberships.length > 0 ? (
+        <div className="vld-understood-preview">
+          <div className="vld-understood-heading">
+            <h2>What we understood</h2>
+            <p>A quick look at the first households in your file.</p>
+          </div>
+          <div className="vld-understood-grid">
+            {review.preview.sampleMemberships.map((membership, index) => (
+              <article key={`${membership.accountHolderName}-${index}`}>
+                <div className="vld-understood-title">
+                  <b>{membership.accountHolderName}</b>
+                  <span>{membership.memberCount} in membership</span>
+                </div>
+                <ul>
+                  {membership.persons.slice(0, 5).map((person, personIndex) => (
+                    <li key={`${person.fullName}-${personIndex}`}>
+                      <span>{person.fullName}</span>
+                      <small>
+                        {person.isPrimary ? "Primary" : "Member"}
+                        {person.age !== null && person.age !== undefined ? `, age ${person.age}` : ""}
+                      </small>
+                    </li>
+                  ))}
+                </ul>
+                {membership.persons.length > 5 ? (
+                  <small className="vld-more-members">+{membership.persons.length - 5} more members</small>
+                ) : null}
+                <div className="vld-understood-meta">
+                  <span>{membership.guestPasses ?? 0} guest passes</span>
+                  <span>{membership.paymentAmount !== undefined ? `$${membership.paymentAmount} tier input` : "No payment tier input"}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="vld-no-preview">
+          <AlertCircle aria-hidden="true" />
+          <div>
+            <b>No valid households yet</b>
+            <p>Adjust the editable columns above, then load the file to validate your changes.</p>
+          </div>
+        </div>
+      )}
+
+      <div className="vld-review-actions">
+        <button className="vld-button vld-button-ghost" type="button" onClick={onBack}>
+          <ArrowLeft aria-hidden="true" /> Back
+        </button>
+        <button className="vld-button vld-button-primary" type="button" onClick={onConfirm}>
+          Load my club <span aria-hidden="true">→</span>
+        </button>
+      </div>
+    </m.section>
+  );
 };
 
 export const Demo = () => {
@@ -142,99 +456,200 @@ export const Demo = () => {
     }
   };
 
-  const runDemo = async (values: DemoFormValues, source: DemoSource): Promise<void> => {
-    if (source === "upload" && !selectedFile) {
+  const showRequestError = (error: unknown): void => {
+    if (axios.isAxiosError<ErrorEnvelope>(error)) {
+      const status = error.response?.status;
+      const envelope = error.response?.data;
+      const message = envelope?.error?.message;
+      const warnings = Array.isArray(envelope?.warnings) ? envelope.warnings : [];
+
+      if (status === 422) {
+        setView({
+          status: "error",
+          kind: "unprocessable",
+          title: "We couldn't find valid memberships in that file.",
+          message: message ?? "Check the member names and email columns, then try another file.",
+          warnings
+        });
+        return;
+      }
+
+      if (status === 400) {
+        setView({
+          status: "error",
+          kind: "file",
+          title: "We couldn't read that file.",
+          message: message ?? "Choose a CSV or Excel file and try again.",
+          warnings
+        });
+        return;
+      }
+
+      if (status === 429) {
+        setView({
+          status: "error",
+          kind: "rate",
+          title: "Please give us a moment.",
+          message: message ?? "Too many demo requests. Wait a few minutes and try again.",
+          warnings: []
+        });
+        return;
+      }
+
+      if (status && status >= 500) {
+        setView({
+          status: "error",
+          kind: "generic",
+          title: "The demo service is temporarily unavailable.",
+          message: "We couldn't complete your request. Please wait a moment and try again.",
+          warnings: []
+        });
+        return;
+      }
+    }
+
+    setView({
+      status: "error",
+      kind: "generic",
+      title: "Something went wrong.",
+      message: "Please check your connection and try again.",
+      warnings: []
+    });
+  };
+
+  const submitUpload = async (values: DemoFormValues): Promise<void> => {
+    if (!selectedFile) {
       setFileError("Choose your member spreadsheet to continue.");
       return;
     }
 
-    setView({ status: "loading", source });
+    setView({ status: "loading", source: "preview" });
 
     try {
       const start = await api.post<StartResponse>("/demo/start", values);
-      let result: UploadResponse;
-
-      if (source === "sample") {
-        const sample = await api.post<UploadResponse>(`/demo/${start.data.demoClubId}/sample`);
-        result = sample.data;
-      } else {
-        const formData = new FormData();
-        formData.append("file", selectedFile!);
-        const upload = await api.post<UploadResponse>(`/demo/${start.data.demoClubId}/upload`, formData, {
-          headers: { "Content-Type": "multipart/form-data" }
-        });
-        result = upload.data;
-      }
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      const preview = await api.post<PreviewResponse>(`/demo/${start.data.demoClubId}/preview`, formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
 
       setView({
-        status: "success",
+        status: "review",
         clubId: start.data.demoClubId,
-        result: { ...result, isSample: source === "sample" }
+        preview: preview.data,
+        selections: initialSelections(preview.data),
+        disabledGroups: []
       });
     } catch (error) {
-      if (axios.isAxiosError<ErrorEnvelope>(error)) {
-        const status = error.response?.status;
-        const envelope = error.response?.data;
-        const message = envelope?.error?.message;
-        const warnings = Array.isArray(envelope?.warnings) ? envelope.warnings : [];
-
-        if (status === 422) {
-          setView({
-            status: "error",
-            kind: "unprocessable",
-            title: "We couldn't find valid memberships in that file.",
-            message: message ?? "Check the member names and email columns, then try another file.",
-            warnings
-          });
-          return;
-        }
-
-        if (status === 400) {
-          setView({
-            status: "error",
-            kind: "file",
-            title: "We couldn't read that file.",
-            message: message ?? "Choose a CSV or Excel file and try again.",
-            warnings
-          });
-          return;
-        }
-
-        if (status === 429) {
-          setView({
-            status: "error",
-            kind: "rate",
-            title: "Please give us a moment.",
-            message: message ?? "Too many demo requests. Wait a few minutes and try again.",
-            warnings: []
-          });
-          return;
-        }
-
-        if (status && status >= 500) {
-          setView({
-            status: "error",
-            kind: "generic",
-            title: "The demo service is temporarily unavailable.",
-            message: "We couldn't complete your request. Please wait a moment and try again.",
-            warnings: []
-          });
-          return;
-        }
-      }
-
-      setView({
-        status: "error",
-        kind: "generic",
-        title: "Something went wrong.",
-        message: "Please check your connection and try again.",
-        warnings: []
-      });
+      showRequestError(error);
     }
   };
 
-  const submitUpload = (values: DemoFormValues): Promise<void> => runDemo(values, "upload");
-  const submitSample = (values: DemoFormValues): Promise<void> => runDemo(values, "sample");
+  const submitSample = async (values: DemoFormValues): Promise<void> => {
+    setView({ status: "loading", source: "sample" });
+
+    try {
+      const start = await api.post<StartResponse>("/demo/start", values);
+      const sample = await api.post<UploadResponse>(`/demo/${start.data.demoClubId}/sample`);
+      setView({
+        status: "success",
+        clubId: start.data.demoClubId,
+        result: { ...sample.data, isSample: true }
+      });
+    } catch (error) {
+      showRequestError(error);
+    }
+  };
+
+  const updateSelection = (sourceColumn: string, targetField: EditableMappingTarget | null): void => {
+    setView((current) => {
+      if (current.status !== "review") {
+        return current;
+      }
+
+      const selections = { ...current.selections };
+      if (targetField) {
+        for (const [source, selectedTarget] of Object.entries(selections)) {
+          if (source !== sourceColumn && selectedTarget === targetField) {
+            selections[source] = null;
+          }
+        }
+      }
+      selections[sourceColumn] = targetField;
+      return { ...current, selections, confirmError: undefined };
+    });
+  };
+
+  const toggleFamilyGroup = (groupKey: string): void => {
+    setView((current) => {
+      if (current.status !== "review") {
+        return current;
+      }
+      const disabledGroups = current.disabledGroups.includes(groupKey)
+        ? current.disabledGroups.filter((key) => key !== groupKey)
+        : [...current.disabledGroups, groupKey];
+      return { ...current, disabledGroups, confirmError: undefined };
+    });
+  };
+
+  const confirmUpload = async (): Promise<void> => {
+    if (view.status !== "review" || !selectedFile) {
+      setView({
+        status: "error",
+        kind: "file",
+        title: "Choose your file again.",
+        message: "The selected spreadsheet is no longer available in this browser.",
+        warnings: []
+      });
+      return;
+    }
+
+    const review = view;
+    const overrides: MappingOverride[] = [];
+    for (const entry of review.preview.mapping) {
+      if (entry.editable) {
+        const selected = review.selections[entry.sourceColumn] ?? null;
+        const original = isEditableTarget(entry.targetField) ? entry.targetField : null;
+        if (selected !== original) {
+          overrides.push({ sourceColumn: entry.sourceColumn, targetField: selected });
+        }
+      }
+
+      if (entry.groupKey && entry.canToggleGroup && review.disabledGroups.includes(entry.groupKey)) {
+        overrides.push({ sourceColumn: entry.sourceColumn, targetField: null });
+      }
+    }
+
+    setView({ status: "loading", source: "confirm" });
+
+    try {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      if (overrides.length > 0) {
+        formData.append("mappingOverrides", JSON.stringify(overrides));
+      }
+      const upload = await api.post<UploadResponse>(`/demo/${review.clubId}/upload`, formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      setView({
+        status: "success",
+        clubId: review.clubId,
+        result: { ...upload.data, isSample: false }
+      });
+    } catch (error) {
+      if (axios.isAxiosError<ErrorEnvelope>(error) && [400, 422].includes(error.response?.status ?? 0)) {
+        setView({
+          ...review,
+          confirmError: {
+            message: error.response?.data?.error?.message ?? "Review the mapping and try again.",
+            warnings: Array.isArray(error.response?.data?.warnings) ? error.response.data.warnings : []
+          }
+        });
+        return;
+      }
+      showRequestError(error);
+    }
+  };
 
   const retry = (): void => {
     if (view.status === "error" && view.kind !== "generic") {
@@ -246,7 +661,7 @@ export const Demo = () => {
   return (
     <div className="vld vld-demo-page">
       <div className="vld-grid-bg" aria-hidden="true" />
-      <main className="vld-demo-main">
+      <main className={`vld-demo-main${view.status === "review" ? " vld-demo-main-review" : ""}`}>
         <SplashBrand />
         <AnimatePresence mode="wait" initial={false}>
           {view.status === "start" ? (
@@ -378,6 +793,16 @@ export const Demo = () => {
             </m.section>
           ) : null}
 
+          {view.status === "review" ? (
+            <MappingReview
+              review={view}
+              onSelectionChange={updateSelection}
+              onToggleGroup={toggleFamilyGroup}
+              onBack={() => setView({ status: "start" })}
+              onConfirm={() => void confirmUpload()}
+            />
+          ) : null}
+
           {view.status === "loading" ? (
             <m.section
               className="vld-demo-card vld-state-card"
@@ -391,11 +816,19 @@ export const Demo = () => {
               <div className="vld-state-icon vld-state-icon-loading">
                 <Loader2 aria-hidden="true" />
               </div>
-              <h1>{view.source === "sample" ? "Building your sample club..." : "Reading your members..."}</h1>
+              <h1>
+                {view.source === "sample"
+                  ? "Building your sample club..."
+                  : view.source === "confirm"
+                    ? "Loading your club..."
+                    : "Reading your members..."}
+              </h1>
               <p>
                 {view.source === "sample"
                   ? "We're loading fictional households, membership tiers, and guest-pass balances."
-                  : "We're organizing households, membership tiers, and guest-pass balances."}
+                  : view.source === "confirm"
+                    ? "We're applying your mapping and creating the live demo dashboard."
+                    : "We're organizing households, membership tiers, and guest-pass balances."}
               </p>
             </m.section>
           ) : null}
