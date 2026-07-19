@@ -244,6 +244,34 @@ describe("demo ingestion (integration)", () => {
         method: "llm"
       })
     ]));
+    expect(preview.body.stats).toEqual({
+      totalRows: 25,
+      membershipsFound: 25,
+      peopleFound: 88,
+      validCount: 25,
+      invalidCount: 0
+    });
+    expect(preview.body.warnings).toEqual([]);
+    expect(preview.body.sampleMemberships).toHaveLength(3);
+    expect(preview.body.sampleMemberships[0]).toMatchObject({
+      accountHolderName: "Caleb Lewis",
+      persons: expect.arrayContaining([
+        expect.objectContaining({ fullName: "Caleb Lewis", isPrimary: true }),
+        expect.objectContaining({ fullName: "Kevin Lewis", isPrimary: false }),
+        expect.objectContaining({ fullName: "Ethan Lewis", isPrimary: false })
+      ])
+    });
+    expect(preview.body.mapping.filter(
+      (entry: { targetField: string | null }) => entry.targetField === "accountHolderName"
+    )).toEqual([
+      expect.objectContaining({
+        sourceColumn: "Household Lead",
+        method: "llm"
+      })
+    ]);
+    expect(await prisma.membership.count({ where: { clubId: start.body.demoClubId } })).toBe(0);
+    expect(await prisma.person.count({ where: { clubId: start.body.demoClubId } })).toBe(0);
+    expect(await prisma.ingestionJob.count({ where: { clubId: start.body.demoClubId } })).toBe(0);
 
     const upload = await request(app)
       .post(`/api/v1/demo/${start.body.demoClubId}/upload`)
@@ -253,6 +281,21 @@ describe("demo ingestion (integration)", () => {
 
     expect(upload.body.membershipsCreated).toBe(25);
     expect(await prisma.membership.count({ where: { clubId: start.body.demoClubId } })).toBe(25);
+
+    const overview = await request(app)
+      .get(`/api/v1/demo/${start.body.demoClubId}/overview`)
+      .expect(200);
+    expect(overview.body.memberships[0]).toMatchObject({
+      accountHolderName: "Caleb Lewis",
+      persons: expect.arrayContaining([
+        expect.objectContaining({ firstName: "Caleb", lastName: "Lewis", isPrimary: true }),
+        expect.objectContaining({ firstName: "Kevin", lastName: "Lewis", isPrimary: false }),
+        expect.objectContaining({ firstName: "Ethan", lastName: "Lewis", isPrimary: false })
+      ])
+    });
+    expect(overview.body.memberships[0].persons.filter(
+      (person: { isPrimary: boolean }) => person.isPrimary
+    )).toHaveLength(1);
   });
 
   it("returns a public overview for a loaded demo club", async () => {

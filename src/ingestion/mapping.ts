@@ -215,10 +215,44 @@ export const inferMapping = (headers: string[], rows: string[][], profiles: Colu
   const scalar: Partial<Record<ScalarTargetField, string>> = {};
   const actions: MappingAction[] = [];
   const droppedColumns = new Set<string>();
+  const wideMemberGroups = detectWideMemberGroups(headers);
+  const longGrouping = detectLongGrouping(headers, rows);
+  const combinedPeopleColumn = detectCombinedPeopleCell(headers, rows);
   const splitName = detectSplitName(headers);
   const combinedAddressColumn = detectCombinedAddress(headers, rows);
+  const familyStructureColumns = new Set<string>();
+
+  for (const group of wideMemberGroups) {
+    [group.nameColumn, group.ageColumn, group.phoneColumn].forEach((column) => {
+      if (column) {
+        familyStructureColumns.add(column);
+      }
+    });
+  }
+
+  if (longGrouping) {
+    [
+      longGrouping.groupIdColumn,
+      longGrouping.nameColumn,
+      longGrouping.isPrimaryColumn,
+      longGrouping.ageColumn,
+      longGrouping.phoneColumn
+    ].forEach((column) => {
+      if (column) {
+        familyStructureColumns.add(column);
+      }
+    });
+  }
+
+  if (combinedPeopleColumn) {
+    familyStructureColumns.add(combinedPeopleColumn);
+  }
 
   for (const header of headers) {
+    if (familyStructureColumns.has(header)) {
+      continue;
+    }
+
     const normalized = normalizeHeader(header);
     const targetField = SYNONYM_LOOKUP[normalized];
 
@@ -261,9 +295,9 @@ export const inferMapping = (headers: string[], rows: string[][], profiles: Colu
   return {
     scalar,
     actions,
-    wideMemberGroups: detectWideMemberGroups(headers),
-    longGrouping: detectLongGrouping(headers, rows),
-    combinedPeopleColumn: detectCombinedPeopleCell(headers, rows),
+    wideMemberGroups,
+    longGrouping,
+    combinedPeopleColumn,
     splitName,
     combinedAddressColumn,
     droppedColumns: [...droppedColumns]
@@ -483,7 +517,7 @@ export const buildMappingReview = (
     const structural = structuralTarget(plan, sourceColumn);
     const targetField = manualTarget !== undefined
       ? manualTarget
-      : scalarTarget ?? structural?.targetField ?? null;
+      : structural?.targetField ?? scalarTarget ?? null;
     const editable = structural === null;
 
     return {
@@ -492,7 +526,7 @@ export const buildMappingReview = (
       confidence: manualTarget !== undefined
         ? 1
         : targetField === null && !plan.droppedColumns.includes(sourceColumn) ? 0 : 1,
-      method: manualTarget !== undefined ? "manual" : scalarTarget ? "fuzzy" : "structural",
+      method: manualTarget !== undefined ? "manual" : structural ? "structural" : scalarTarget ? "fuzzy" : "structural",
       sampleValues: distinctSamples(rows, columnIndex),
       editable,
       ...(structural?.groupKey ? { groupKey: structural.groupKey } : {}),
@@ -507,18 +541,21 @@ export const mergeMappingSuggestions = (
 ): MappingReviewEntry[] => {
   const occupiedTargets = new Set(
     mapping
+      .filter((entry) => !entry.groupKey)
       .map((entry) => entry.targetField)
-      .filter((target): target is string => target !== null)
+      .filter((target): target is ScalarTargetField =>
+        target !== null && SCALAR_TARGET_FIELDS.includes(target as ScalarTargetField)
+      )
   );
   const suggestionBySource = new Map<string, MappingSuggestion>();
 
   for (const suggestion of suggestions) {
-    if (suggestion.targetField !== "ignore" && occupiedTargets.has(suggestion.targetField)) {
+    const entry = mapping.find((item) => item.sourceColumn === suggestion.sourceColumn);
+    if (!entry || entry.targetField !== null || entry.groupKey) {
       continue;
     }
 
-    const entry = mapping.find((item) => item.sourceColumn === suggestion.sourceColumn);
-    if (!entry || entry.targetField !== null || entry.groupKey) {
+    if (suggestion.targetField !== "ignore" && occupiedTargets.has(suggestion.targetField)) {
       continue;
     }
 
@@ -542,4 +579,30 @@ export const mergeMappingSuggestions = (
       editable: true
     };
   });
+};
+
+export const aiMappingOverrides = (mapping: MappingReviewEntry[]): MappingOverride[] => {
+  const overrides: MappingOverride[] = [];
+
+  for (const entry of mapping) {
+    if (entry.method !== "llm") {
+      continue;
+    }
+
+    if (entry.targetField === null) {
+      overrides.push({ sourceColumn: entry.sourceColumn, targetField: null });
+      continue;
+    }
+
+    if (!SCALAR_TARGET_FIELDS.includes(entry.targetField as ScalarTargetField)) {
+      continue;
+    }
+
+    overrides.push({
+      sourceColumn: entry.sourceColumn,
+      targetField: entry.targetField as ScalarTargetField
+    });
+  }
+
+  return overrides;
 };

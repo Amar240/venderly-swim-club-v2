@@ -7,6 +7,7 @@ import { z } from "zod";
 import { proposeMapping } from "../ingestion/aiMapper";
 import { analyzeIngestFile, ingestFile } from "../ingestion/normalize";
 import {
+  aiMappingOverrides,
   EDITABLE_MAPPING_TARGETS,
   mergeMappingSuggestions,
   type MappingOverride
@@ -373,13 +374,18 @@ demoRouter.post("/:clubId/preview", uploadRateLimit, receiveDemoFile, async (req
         sampleValues: entry.sampleValues
       }));
     const suggestions = await proposeMapping(unresolvedColumns);
+    const mapping = mergeMappingSuggestions(analysis.mapping, suggestions);
+    const effectiveOverrides = aiMappingOverrides(mapping);
+    const effectiveAnalysis = effectiveOverrides.length > 0
+      ? analyzeIngestFile(file.buffer, file.originalname, effectiveOverrides)
+      : analysis;
 
     res.json({
-      mapping: mergeMappingSuggestions(analysis.mapping, suggestions),
-      droppedColumns: analysis.result.droppedColumns,
-      stats: analysis.stats,
-      sampleMemberships: analysis.result.memberships.slice(0, 3),
-      warnings: analysis.result.warnings
+      mapping,
+      droppedColumns: effectiveAnalysis.result.droppedColumns,
+      stats: effectiveAnalysis.stats,
+      sampleMemberships: effectiveAnalysis.result.memberships.slice(0, 3),
+      warnings: effectiveAnalysis.result.warnings
     });
   } catch (error) {
     next(error);

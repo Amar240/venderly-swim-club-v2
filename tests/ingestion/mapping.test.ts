@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  aiMappingOverrides,
   applyMappingOverrides,
   buildMappingReview,
   inferMapping,
@@ -128,6 +129,83 @@ describe("mergeMappingSuggestions", () => {
 
     expect(merged.find((entry) => entry.sourceColumn === "Mystery Balance")?.targetField).toBeNull();
     expect(merged.find((entry) => entry.sourceColumn === "1st Member Full Name")?.method).toBe("structural");
+  });
+
+  it("keeps wide member slots structural while accepting the household lead as holder", () => {
+    const structuralHeaders = [
+      "Household Lead",
+      "1st Member Full Name",
+      "1st Member Age",
+      "1st Member Phone",
+      "2nd Member Full Name",
+      "2nd Member Age",
+      "2nd Member Phone"
+    ];
+    const structuralRows = [[
+      "Caleb Lewis",
+      "Kevin Lewis",
+      "67",
+      "3025911540",
+      "Ethan Lewis",
+      "11",
+      "3025550123"
+    ]];
+    const inferred = inferMapping(
+      structuralHeaders,
+      structuralRows,
+      profileColumns(structuralHeaders, structuralRows)
+    );
+    const review = buildMappingReview(structuralHeaders, structuralRows, inferred);
+    const merged = mergeMappingSuggestions(review, [{
+      sourceColumn: "Household Lead",
+      targetField: "accountHolderName",
+      confidence: 0.95
+    }]);
+    const effective = applyMappingOverrides(
+      inferred,
+      structuralHeaders,
+      aiMappingOverrides(merged)
+    );
+
+    expect(inferred.scalar.accountHolderName).toBeUndefined();
+    expect(merged.filter((entry) => entry.targetField === "accountHolderName")).toEqual([
+      expect.objectContaining({
+        sourceColumn: "Household Lead",
+        method: "llm",
+        confidence: 0.95
+      })
+    ]);
+    expect(merged.find((entry) => entry.sourceColumn === "1st Member Full Name")).toMatchObject({
+      targetField: "familyMemberName",
+      method: "structural",
+      groupKey: "family-wide"
+    });
+    expect(merged.find((entry) => entry.sourceColumn === "2nd Member Full Name")).toMatchObject({
+      targetField: "familyMemberName",
+      method: "structural",
+      groupKey: "family-wide"
+    });
+    expect(effective.scalar.accountHolderName).toBe("Household Lead");
+    expect(effective.wideMemberGroups).toHaveLength(2);
+  });
+
+  it("does not scalar-map a full-name column consumed by long family grouping", () => {
+    const longHeaders = ["Household ID", "Full Name", "Is Primary"];
+    const longRows = [
+      ["family-1", "Caleb Lewis", "true"],
+      ["family-1", "Kevin Lewis", "false"]
+    ];
+    const inferred = inferMapping(longHeaders, longRows, profileColumns(longHeaders, longRows));
+
+    expect(inferred.longGrouping?.nameColumn).toBe("Full Name");
+    expect(inferred.scalar.accountHolderName).toBeUndefined();
+    expect(buildMappingReview(longHeaders, longRows, inferred).find(
+      (entry) => entry.sourceColumn === "Full Name"
+    )).toMatchObject({
+      targetField: "familyMemberName",
+      method: "structural",
+      groupKey: "family-long"
+    });
   });
 });
 
