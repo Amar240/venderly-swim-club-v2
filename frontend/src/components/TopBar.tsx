@@ -6,6 +6,7 @@ import { SettingsMenu } from "./SettingsMenu";
 import { useConnection } from "../hooks/useConnection";
 import { useAuth } from "../hooks/useAuth";
 import { cn } from "../lib/utils";
+import { DemoSessionBanner } from "./DemoSessionBanner";
 
 const LOGO_URL = "https://assets.cdn.filesafe.space/Bjt6c984XN3YKY5porzI/media/6980bb3566e7ca30baf9488c.png";
 
@@ -15,6 +16,7 @@ export const TopBar = () => {
   const { staff } = useAuth();
   const location = useLocation();
   const isAdmin = staff?.role === "ADMIN";
+  const isDemoAdmin = Boolean(staff?.demoAdmin);
   const isAdminRoute = location.pathname.startsWith("/admin");
 
   useEffect(() => {
@@ -26,10 +28,20 @@ export const TopBar = () => {
 
   return (
     <header className="sticky top-0 z-40 border-b border-brand-border bg-brand-surface/95 backdrop-blur">
+      <DemoSessionBanner />
       <div className="flex h-14 items-center justify-between px-4 md:px-6">
         <div className="flex min-w-0 items-center gap-4">
-          <img src={LOGO_URL} alt="Wedgewood Swim Club" className="h-9 w-auto shrink-0" />
-          <div className="hidden text-lg font-semibold text-brand-navy sm:block">Wedgewood Pool</div>
+          {isDemoAdmin ? (
+            <div className="flex shrink-0 items-center gap-2" aria-label="Splash Manager">
+              <span className="h-7 w-7 rotate-45 rounded-lg bg-brand-primary shadow-sm" aria-hidden="true" />
+              <span className="hidden text-lg font-semibold text-brand-navy sm:block">Splash Manager</span>
+            </div>
+          ) : (
+            <>
+              <img src={LOGO_URL} alt="Wedgewood Swim Club" className="h-9 w-auto shrink-0" />
+              <div className="hidden text-lg font-semibold text-brand-navy sm:block">Wedgewood Pool</div>
+            </>
+          )}
           <nav className="flex h-14 items-center gap-1">
             <TopNavLink to="/dashboard">Dashboard</TopNavLink>
             <TopNavLink to="/members">Members</TopNavLink>
@@ -48,9 +60,9 @@ export const TopBar = () => {
       </div>
       {isAdminRoute && (
         <nav className="flex h-11 items-center gap-1 overflow-x-auto border-t border-brand-border px-4 md:px-6">
-          <SubNavLink to="/admin/staff">Staff</SubNavLink>
+          {!isDemoAdmin && <SubNavLink to="/admin/staff">Staff</SubNavLink>}
           <SubNavLink to="/admin/activity">Activity</SubNavLink>
-          <SubNavLink to="/admin/webhooks">Webhooks</SubNavLink>
+          {!isDemoAdmin && <SubNavLink to="/admin/webhooks">Webhooks</SubNavLink>}
         </nav>
       )}
     </header>

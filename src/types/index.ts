@@ -16,6 +16,7 @@ export interface AuthenticatedStaff {
   clubId: string;
   email: string;
   role: StaffRole;
+  demoAdmin?: boolean;
 }
 
 export interface JwtPayload {
@@ -23,6 +24,7 @@ export interface JwtPayload {
   clubId: string;
   email: string;
   role: StaffRole;
+  demoAdmin?: boolean;
 }
 
 export interface PersonLookupInput {

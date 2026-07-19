@@ -252,6 +252,10 @@ const ingestAndLoadDemo = async (input: {
 
 export const demoRouter = Router();
 
+demoRouter.get("/capabilities", (_req, res) => {
+  res.json({ fullAdmin: false });
+});
+
 demoRouter.get("/:clubId/overview", overviewRateLimit, async (req, res, next) => {
   try {
     const { clubId } = clubParamsSchema.parse(req.params);

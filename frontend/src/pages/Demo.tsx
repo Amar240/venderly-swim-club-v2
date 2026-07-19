@@ -17,6 +17,7 @@ import { Link } from "react-router-dom";
 import { z } from "zod";
 import { api } from "../lib/api";
 import { SplashBrand } from "../components/SplashBrand";
+import { setDemoCapability } from "../lib/demoSession";
 
 const BOOKING_URL = "https://secure.venderly.us/widget/booking/GhQmK64lJqAj3TBFaMq9";
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -128,12 +129,13 @@ type DemoView =
   | {
       status: "review";
       clubId: string;
+      prospectId: string;
       preview: PreviewResponse;
       selections: Record<string, EditableMappingTarget | null>;
       disabledGroups: string[];
       confirmError?: { message: string; warnings: string[] };
     }
-  | { status: "success"; clubId: string; result: UploadResponse & { isSample: boolean } }
+  | { status: "success"; clubId: string; prospectId: string; result: UploadResponse & { isSample: boolean } }
   | {
       status: "error";
       kind: "unprocessable" | "file" | "rate" | "generic";
@@ -619,6 +621,7 @@ export const Demo = () => {
 
     try {
       const start = await api.post<StartResponse>("/demo/start", values);
+      setDemoCapability({ demoClubId: start.data.demoClubId, prospectId: start.data.prospectId });
       const formData = new FormData();
       formData.append("file", selectedFile);
       const preview = await api.post<PreviewResponse>(`/demo/${start.data.demoClubId}/preview`, formData, {
@@ -628,6 +631,7 @@ export const Demo = () => {
       setView({
         status: "review",
         clubId: start.data.demoClubId,
+        prospectId: start.data.prospectId,
         preview: preview.data,
         selections: initialSelections(preview.data),
         disabledGroups: []
@@ -642,10 +646,12 @@ export const Demo = () => {
 
     try {
       const start = await api.post<StartResponse>("/demo/start", values);
+      setDemoCapability({ demoClubId: start.data.demoClubId, prospectId: start.data.prospectId });
       const sample = await api.post<UploadResponse>(`/demo/${start.data.demoClubId}/sample`);
       setView({
         status: "success",
         clubId: start.data.demoClubId,
+        prospectId: start.data.prospectId,
         result: { ...sample.data, isSample: true }
       });
     } catch (error) {
@@ -701,6 +707,7 @@ export const Demo = () => {
       setView({
         status: "review",
         clubId: view.clubId,
+        prospectId: view.prospectId,
         preview: preview.data,
         selections: initialSelections(preview.data),
         disabledGroups: []
@@ -756,6 +763,7 @@ export const Demo = () => {
       setView({
         status: "success",
         clubId: review.clubId,
+        prospectId: review.prospectId,
         result: { ...upload.data, isSample: false }
       });
     } catch (error) {

@@ -1,9 +1,10 @@
 import { Router, type Request } from "express";
 import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../middleware/errorHandler";
+import { isDemoStaffEmail } from "./demoAdminSession";
+import { signStaffToken } from "../lib/staffTokens";
 
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
 const LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
@@ -46,12 +47,6 @@ export const authRouter = Router();
 
 authRouter.post("/login", async (req, res, next) => {
   try {
-    const jwtSecret = process.env.JWT_SECRET;
-
-    if (!jwtSecret) {
-      throw new HttpError(500, "JWT_SECRET_NOT_CONFIGURED", "JWT secret is not configured");
-    }
-
     const { pin } = loginSchema.parse(req.body);
     const attemptKey = getLoginAttemptKey(req);
     const now = Date.now();
@@ -94,27 +89,30 @@ authRouter.post("/login", async (req, res, next) => {
 
     loginAttempts.delete(attemptKey);
 
-    const token = jwt.sign(
-      {
-        sub: staff.id,
-        clubId: staff.clubId,
-        email: staff.email,
-        role: staff.role
-      },
-      jwtSecret,
-      { expiresIn: "8h" }
-    );
+    const demoProspect = isDemoStaffEmail(staff.email)
+      ? await prisma.prospect.findFirst({
+          where: { clubId: staff.clubId, expiresAt: { gt: new Date() } },
+          select: { expiresAt: true }
+        })
+      : null;
+    const demoAdmin = Boolean(demoProspect);
+    const signed = signStaffToken(staff, {
+      demoAdmin,
+      expiresAt: demoProspect?.expiresAt,
+      maxLifetimeSeconds: 8 * 60 * 60
+    });
 
     res.json({
       status: "ok",
       data: {
-        token,
+        token: signed.token,
         staff: {
           id: staff.id,
           clubId: staff.clubId,
           email: staff.email,
           name: staff.name,
-          role: staff.role
+          role: staff.role,
+          ...(demoAdmin ? { demoAdmin: true } : {})
         }
       }
     });

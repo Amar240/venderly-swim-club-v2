@@ -17,7 +17,7 @@ app.listen(port, () => {
   const appMode = process.env.APP_MODE ?? "full";
   logger.info("Swim club API listening", { port, appMode });
 
-  if (appMode === "demo") {
+  if (appMode === "demo" || appMode === "pilot") {
     startDemoCleanupJob();
     return;
   }

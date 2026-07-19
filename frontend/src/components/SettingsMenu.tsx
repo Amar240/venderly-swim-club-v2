@@ -25,9 +25,11 @@ import {
 } from "./ui/dropdown-menu";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { useAuth } from "../hooks/useAuth";
 
 export const SettingsMenu = () => {
   const logout = useLogout();
+  const { staff } = useAuth();
   const { soundEnabled, toggleSound } = useUiPrefs();
   const [capacityDialogOpen, setCapacityDialogOpen] = useState(false);
   const [signOutDialogOpen, setSignOutDialogOpen] = useState(false);
@@ -72,17 +74,21 @@ export const SettingsMenu = () => {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
           <ToggleRow icon={Volume2} label="Sound" checked={soundEnabled} onToggle={toggleSound} />
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onSelect={(event) => {
-              event.preventDefault();
-              setCapacityDialogOpen(true);
-            }}
-            className="min-h-11"
-          >
-            <Waves className="h-4 w-4" />
-            Pool capacity
-          </DropdownMenuItem>
+          {!staff?.demoAdmin ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  setCapacityDialogOpen(true);
+                }}
+                className="min-h-11"
+              >
+                <Waves className="h-4 w-4" />
+                Pool capacity
+              </DropdownMenuItem>
+            </>
+          ) : null}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onSelect={(event) => {

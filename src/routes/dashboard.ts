@@ -9,6 +9,7 @@ import {
   updateClubCapacity
 } from "../handlers/dashboard";
 import { jwtAuth } from "../middleware/jwtAuth";
+import { blockDemoFeature } from "../middleware/demoFeatureGuard";
 
 export const dashboardRouter = Router();
 
@@ -20,4 +21,4 @@ dashboardRouter.get("/recent", getRecentCheckinEvents);
 dashboardRouter.get("/search", searchMembers);
 dashboardRouter.post("/signout/manual", manualSignout);
 dashboardRouter.post("/checkin/manual", manualCheckin);
-dashboardRouter.post("/capacity", updateClubCapacity);
+dashboardRouter.post("/capacity", blockDemoFeature, updateClubCapacity);

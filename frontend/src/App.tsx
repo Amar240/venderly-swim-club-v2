@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { LazyMotion, domAnimation } from "framer-motion";
-import { lazy, Suspense, type ReactNode } from "react";
+import { lazy, Suspense, type ReactNode, useEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { Toaster } from "sonner";
 import { TopBar } from "./components/TopBar";
@@ -9,6 +9,7 @@ import { Skeleton } from "./components/ui/skeleton";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { UiPrefsProvider } from "./hooks/useUiPrefs";
 import { queryClient } from "./lib/queryClient";
+import { getDemoCapability } from "./lib/demoSession";
 import { AdminActivity } from "./pages/AdminActivity";
 import { AdminStaff } from "./pages/AdminStaff";
 import { AdminWebhooks } from "./pages/AdminWebhooks";
@@ -22,9 +23,25 @@ import { Members } from "./pages/Members";
 const Reports = lazy(() => import("./pages/Reports").then((module) => ({ default: module.Reports })));
 
 const ProtectedRoute = ({ children, adminOnly = false }: { children: ReactNode; adminOnly?: boolean }) => {
-  const { isAuthenticated, staff } = useAuth();
+  const { isAuthenticated, restoreDemoSession, staff } = useAuth();
+  const capabilityRef = useRef(getDemoCapability());
+  const [attemptedRestore, setAttemptedRestore] = useState(false);
+  const [restoreFailed, setRestoreFailed] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated || attemptedRestore || !capabilityRef.current) return;
+    setAttemptedRestore(true);
+    void restoreDemoSession().then((restored) => setRestoreFailed(!restored));
+  }, [attemptedRestore, isAuthenticated, restoreDemoSession]);
 
   if (!isAuthenticated) {
+    if (capabilityRef.current && !restoreFailed) {
+      return <div className="min-h-screen animate-pulse bg-brand-background" aria-label="Restoring demo session" />;
+    }
+    if (restoreFailed) {
+      const clubId = capabilityRef.current?.demoClubId;
+      return <Navigate to={clubId ? `/demo/${clubId}/dashboard` : "/demo"} replace />;
+    }
     return <Navigate to="/login" replace />;
   }
 
@@ -46,6 +63,16 @@ const StaffLayout = () => (
     <Outlet />
   </div>
 );
+
+const AdminRootRedirect = () => {
+  const { staff } = useAuth();
+  return <Navigate to={staff?.demoAdmin ? "/admin/activity" : "/admin/staff"} replace />;
+};
+
+const DemoRestrictedRoute = ({ children, fallback }: { children: ReactNode; fallback: string }) => {
+  const { staff } = useAuth();
+  return staff?.demoAdmin ? <Navigate to={fallback} replace /> : <>{children}</>;
+};
 
 const ReportsFallback = () => (
   <main className="mx-auto max-w-6xl p-4 md:p-6">
@@ -102,12 +129,12 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
-                  <Route path="/admin" element={<Navigate to="/admin/staff" replace />} />
+                  <Route path="/admin" element={<AdminRootRedirect />} />
                   <Route
                     path="/admin/staff"
                     element={
                       <ProtectedRoute adminOnly>
-                        <AdminStaff />
+                        <DemoRestrictedRoute fallback="/admin/activity"><AdminStaff /></DemoRestrictedRoute>
                       </ProtectedRoute>
                     }
                   />
@@ -123,7 +150,7 @@ function App() {
                     path="/admin/webhooks"
                     element={
                       <ProtectedRoute adminOnly>
-                        <AdminWebhooks />
+                        <DemoRestrictedRoute fallback="/admin/activity"><AdminWebhooks /></DemoRestrictedRoute>
                       </ProtectedRoute>
                     }
                   />

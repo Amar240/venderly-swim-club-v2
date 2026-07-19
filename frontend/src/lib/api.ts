@@ -37,6 +37,28 @@ export interface LoginResponse {
   };
 }
 
+export interface DemoAdminSessionResponse {
+  token: string;
+  staffEmail: string;
+  tempPin: string | null;
+  expiresAt: string;
+  alreadyCreated: boolean;
+  staff: StaffSession & { role: "ADMIN"; demoAdmin: true };
+}
+
+export const fetchDemoCapabilities = async (): Promise<{ fullAdmin: boolean }> => {
+  const response = await api.get<{ fullAdmin: boolean }>("/demo/capabilities");
+  return response.data;
+};
+
+export const postDemoAdminSession = async (
+  clubId: string,
+  prospectId: string
+): Promise<DemoAdminSessionResponse> => {
+  const response = await api.post<DemoAdminSessionResponse>(`/demo/${clubId}/admin-session`, { prospectId });
+  return response.data;
+};
+
 export interface DashboardSummary {
   visitedToday: number;
   visitedTodayMembers: number;

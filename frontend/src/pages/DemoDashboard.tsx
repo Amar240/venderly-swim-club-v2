@@ -6,15 +6,19 @@ import {
   ExternalLink,
   House,
   Loader2,
+  LayoutDashboard,
   Search,
   Ticket,
   UserRound,
   UsersRound
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { api } from "../lib/api";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { api, fetchDemoCapabilities, postDemoAdminSession } from "../lib/api";
 import { SplashBrand } from "../components/SplashBrand";
+import { getDemoCapability, setDemoCapability } from "../lib/demoSession";
+import { authStore } from "../lib/auth";
+import { queryClient } from "../lib/queryClient";
 
 const BOOKING_URL = "https://secure.venderly.us/widget/booking/GhQmK64lJqAj3TBFaMq9";
 
@@ -58,6 +62,11 @@ export const DemoDashboard = () => {
   const { clubId = "" } = useParams<{ clubId: string }>();
   const [state, setState] = useState<OverviewState>({ status: "loading" });
   const [query, setQuery] = useState("");
+  const [fullAdminAvailable, setFullAdminAvailable] = useState(false);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState("");
+  const navigate = useNavigate();
+  const hasDemoCapability = Boolean(getDemoCapability(clubId));
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -88,6 +97,38 @@ export const DemoDashboard = () => {
       document.title = previousTitle;
     };
   }, [clubId]);
+
+  useEffect(() => {
+    void fetchDemoCapabilities()
+      .then((result) => setFullAdminAvailable(result.fullAdmin))
+      .catch(() => setFullAdminAvailable(false));
+  }, []);
+
+  const enterFullAdmin = async (): Promise<void> => {
+    const capability = getDemoCapability(clubId);
+    if (!capability || capability.demoClubId !== clubId) {
+      setAdminError("Open this dashboard from the demo you created to explore the full admin.");
+      return;
+    }
+
+    setAdminLoading(true);
+    setAdminError("");
+    try {
+      setDemoCapability(capability);
+      const session = await postDemoAdminSession(clubId, capability.prospectId);
+      queryClient.clear();
+      authStore.setSession(session.token, session.staff, { demoTempPin: session.tempPin });
+      navigate("/dashboard");
+    } catch (error) {
+      setAdminError(
+        axios.isAxiosError(error) && error.response?.status === 429
+          ? "Too many attempts. Wait a few minutes and try again."
+          : "The full admin is temporarily unavailable. Please try again."
+      );
+    } finally {
+      setAdminLoading(false);
+    }
+  };
 
   const filteredMemberships = useMemo(() => {
     if (state.status !== "success") {
@@ -147,7 +188,15 @@ export const DemoDashboard = () => {
                 <h1>{state.overview.club.name}</h1>
                 <p>This is your club, built from the file you uploaded.</p>
               </div>
+              {fullAdminAvailable && hasDemoCapability ? (
+                <button className="vld-button vld-button-primary" type="button" onClick={() => void enterFullAdmin()} disabled={adminLoading}>
+                  {adminLoading ? <Loader2 className="vld-spin-icon" aria-hidden="true" /> : <LayoutDashboard aria-hidden="true" />}
+                  {adminLoading ? "Opening admin..." : "Explore the full admin"}
+                </button>
+              ) : null}
             </header>
+
+            {adminError ? <p className="vld-dashboard-admin-error" role="alert">{adminError}</p> : null}
 
             <section className="vld-overview-stats" aria-label="Club summary">
               <article>

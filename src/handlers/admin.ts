@@ -1,11 +1,16 @@
 import type { RequestHandler } from "express";
-import bcrypt from "bcrypt";
 import { Prisma, type StaffRole } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { getDayBounds, getNewYorkTodayBounds } from "../lib/timezone";
 import { HttpError } from "../middleware/errorHandler";
 import type { StaffResponse } from "../middleware/jwtAuth";
+import {
+  assertActivePinAvailable,
+  hashStaffPin
+} from "../lib/staffPins";
+
+export { findActivePinConflict } from "../lib/staffPins";
 
 const createStaffSchema = z.object({
   name: z.string().trim().min(1).max(80),
@@ -63,11 +68,6 @@ type StaffRecord = {
   createdAt: Date;
 };
 
-type StaffPinRecord = {
-  id: string;
-  passwordHash: string;
-};
-
 type ActivityCheckin = {
   id: string;
   checkedInAt: Date;
@@ -115,24 +115,6 @@ export const serializeStaff = (staff: StaffRecord) => ({
   createdAt: staff.createdAt.toISOString()
 });
 
-export const findActivePinConflict = async (
-  pin: string,
-  staff: StaffPinRecord[],
-  excludeStaffId?: string
-): Promise<StaffPinRecord | null> => {
-  for (const candidate of staff) {
-    if (candidate.id === excludeStaffId) {
-      continue;
-    }
-
-    if (await bcrypt.compare(pin, candidate.passwordHash)) {
-      return candidate;
-    }
-  }
-
-  return null;
-};
-
 export const flattenActivityEvents = (events: ActivityCheckin[]): AdminActivityEvent[] =>
   events
     .flatMap((event): AdminActivityEvent[] => {
@@ -178,25 +160,6 @@ export const serializeEditActivityEvents = (events: MemberEditLogRecord[]): Admi
     changes: event.changes
   }));
 
-const assertNoActivePinConflict = async (clubId: string, pin: string, excludeStaffId?: string): Promise<void> => {
-  const activeStaff = await prisma.staff.findMany({
-    where: {
-      clubId,
-      isActive: true
-    },
-    select: {
-      id: true,
-      passwordHash: true
-    }
-  });
-
-  const conflict = await findActivePinConflict(pin, activeStaff, excludeStaffId);
-
-  if (conflict) {
-    throw new HttpError(409, "PIN_TAKEN", "PIN is already assigned to another active staff member");
-  }
-};
-
 const activeAdminCount = (clubId: string): Promise<number> =>
   prisma.staff.count({
     where: {
@@ -235,9 +198,9 @@ export const createStaff: RequestHandler = async (req, res, next) => {
     const clubId = staffResponse.locals.staff.clubId;
     const input = createStaffSchema.parse(req.body);
 
-    await assertNoActivePinConflict(clubId, input.pin);
+    await assertActivePinAvailable(input.pin);
 
-    const passwordHash = await bcrypt.hash(input.pin, 10);
+    const passwordHash = await hashStaffPin(input.pin);
     const staff = await prisma.staff.create({
       data: {
         clubId,
@@ -306,8 +269,8 @@ export const updateStaff: RequestHandler = async (req, res, next) => {
     }
 
     if (input.pin !== undefined) {
-      await assertNoActivePinConflict(clubId, input.pin, target.id);
-      data.passwordHash = await bcrypt.hash(input.pin, 10);
+      await assertActivePinAvailable(input.pin, target.id);
+      data.passwordHash = await hashStaffPin(input.pin);
     }
 
     const staff = await prisma.staff.update({

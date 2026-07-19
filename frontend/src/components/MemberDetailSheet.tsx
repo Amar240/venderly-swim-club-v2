@@ -525,7 +525,7 @@ const HouseholdSheetBody = ({ member, clickedPersonId }: { member: MemberDetail;
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
-                  {!person.isPrimary && (
+                  {!person.isPrimary && !staff?.demoAdmin && (
                     <button
                       type="button"
                       aria-label={`Remove ${person.name}`}

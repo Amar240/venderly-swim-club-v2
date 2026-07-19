@@ -5,6 +5,7 @@ import { getNewYorkTodayBounds } from "../lib/timezone";
 import { HttpError } from "../middleware/errorHandler";
 import { adminAuth } from "../middleware/adminAuth";
 import { jwtAuth, type StaffResponse } from "../middleware/jwtAuth";
+import { blockDemoFeature } from "../middleware/demoFeatureGuard";
 import {
   adjustGuestPasses,
   addPersonToMembership,
@@ -72,8 +73,8 @@ const tierWhere = (tier: "all" | "family" | "adult" | "student") => {
 };
 
 export const apiV1Router = Router();
-const membersRouter = Router();
-const membershipsRouter = Router();
+export const membersRouter = Router();
+export const membershipsRouter = Router();
 
 apiV1Router.get("/health", (_req, res) => {
   res.json({
@@ -265,7 +266,7 @@ membersRouter.get("/", async (req, res, next) => {
 });
 
 membersRouter.patch("/persons/:id", updatePerson);
-membersRouter.delete("/persons/:id", deletePerson);
+membersRouter.delete("/persons/:id", blockDemoFeature, deletePerson);
 membersRouter.post("/memberships/:membershipId/persons", addPersonToMembership);
 membersRouter.patch("/memberships/:id/address", updateMembershipAddress);
 membersRouter.patch("/memberships/:id/emergency", updateMembershipEmergency);

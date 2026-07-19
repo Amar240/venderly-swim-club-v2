@@ -1938,6 +1938,12 @@
   margin-bottom: 30px;
 }
 
+.vld .vld-dashboard-admin-error {
+  margin: 0 0 1rem;
+  color: var(--vld-coral);
+  font-size: 0.95rem;
+}
+
 .vld .vld-dashboard-header h1 {
   margin: 18px 0 6px;
   font-size: clamp(38px, 5vw, 58px);

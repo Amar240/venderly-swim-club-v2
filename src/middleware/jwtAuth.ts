@@ -8,7 +8,8 @@ const jwtPayloadSchema = z.object({
   sub: z.string().min(1),
   clubId: z.string().min(1),
   email: z.string().email(),
-  role: z.enum(["STAFF", "ADMIN"])
+  role: z.enum(["STAFF", "ADMIN"]),
+  demoAdmin: z.literal(true).optional()
 });
 
 export interface StaffLocals {
@@ -48,7 +49,8 @@ export const jwtAuth: RequestHandler = (req, res, next) => {
     id: payload.sub,
     clubId: payload.clubId,
     email: payload.email,
-    role: payload.role
+    role: payload.role,
+    demoAdmin: payload.demoAdmin
   };
 
   next();

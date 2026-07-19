@@ -12,6 +12,7 @@ import {
   TableRow
 } from "../components/ui/table";
 import { fetchActivity, fetchEditActivity, fetchStaff } from "../lib/api";
+import { useAuth } from "../hooks/useAuth";
 
 const todayInputValue = (): string => {
   const now = new Date();
@@ -64,12 +65,14 @@ const formatGuestPassAdjustment = (changes: Record<string, unknown>): string | n
 };
 
 export const AdminActivity = () => {
+  const { staff: currentStaff } = useAuth();
   const [activeFeed, setActiveFeed] = useState<"checkins" | "edits">("checkins");
   const [staffId, setStaffId] = useState("");
   const [date, setDate] = useState(todayInputValue);
   const staffQuery = useQuery({
     queryKey: ["admin", "staff"],
-    queryFn: fetchStaff
+    queryFn: fetchStaff,
+    enabled: !currentStaff?.demoAdmin
   });
   const activityQuery = useQuery({
     queryKey: ["admin", "activity", staffId, date],
@@ -83,7 +86,16 @@ export const AdminActivity = () => {
     refetchInterval: 10_000,
     enabled: activeFeed === "edits"
   });
-  const staff = staffQuery.data?.staff ?? [];
+  const staff = currentStaff?.demoAdmin && currentStaff
+    ? [{
+        id: currentStaff.id,
+        name: currentStaff.name,
+        email: currentStaff.email,
+        role: currentStaff.role,
+        isActive: true,
+        createdAt: ""
+      }]
+    : staffQuery.data?.staff ?? [];
   const events = activityQuery.data?.events ?? [];
   const editEvents = editActivityQuery.data?.events ?? [];
   const formattedRows = useMemo(

@@ -3,9 +3,9 @@ import express from "express";
 import helmet from "helmet";
 import path from "path";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
-import { routes } from "./routes";
+import { createRoutes } from "./routes";
 
-export const createApp = (): express.Express => {
+export const createApp = (appMode = process.env.APP_MODE): express.Express => {
   const app = express();
   app.set("trust proxy", 1);
 
@@ -35,7 +35,7 @@ export const createApp = (): express.Express => {
   app.use(cors({ origin: corsOrigin === "*" ? true : corsOrigin }));
   app.use(express.json({ limit: "1mb" }));
 
-  app.use(routes);
+  app.use(createRoutes(appMode));
   app.use(express.static(frontendDistPath));
   app.get("*", (req, res, next) => {
     const reservedPrefixes = ["/api", "/webhooks", "/auth"];
