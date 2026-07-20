@@ -1064,6 +1064,14 @@
   height: 17px;
 }
 
+.vld button.vld-back-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+
 .vld .vld-upload-card h1,
 .vld .vld-state-card h1 {
   margin: 24px 0 12px;
@@ -1931,7 +1939,12 @@
 }
 
 .vld .vld-dashboard-main > .vld-brand-link {
-  margin-bottom: 48px;
+  margin-bottom: 18px;
+}
+
+.vld .vld-dashboard-back {
+  width: fit-content;
+  margin-bottom: 28px;
 }
 
 .vld .vld-dashboard-header {
@@ -2476,7 +2489,11 @@
   }
 
   .vld .vld-dashboard-main > .vld-brand-link {
-    margin-bottom: 34px;
+    margin-bottom: 16px;
+  }
+
+  .vld .vld-dashboard-back {
+    margin-bottom: 22px;
   }
 
   .vld .vld-dashboard-header h1 {

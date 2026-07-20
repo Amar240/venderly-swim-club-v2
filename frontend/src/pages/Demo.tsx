@@ -489,7 +489,7 @@ const MappingReview = ({
 
       <div className="vld-review-actions">
         <button className="vld-button vld-button-ghost" type="button" onClick={onBack}>
-          <ArrowLeft aria-hidden="true" /> Back
+          <ArrowLeft aria-hidden="true" /> Back to upload
         </button>
         <button className="vld-button vld-button-primary" type="button" onClick={onConfirm}>
           Load my club <span aria-hidden="true">→</span>
@@ -509,6 +509,7 @@ export const Demo = () => {
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors }
   } = useForm<DemoFormValues>({
     resolver: zodResolver(demoFormSchema),
@@ -788,6 +789,17 @@ export const Demo = () => {
     setView({ status: "start" });
   };
 
+  const startAnotherDemo = (): void => {
+    clearFile();
+    reset({
+      clubName: "",
+      contactName: "",
+      email: "",
+      authorized: false
+    });
+    setView({ status: "start" });
+  };
+
   return (
     <div className="vld vld-demo-page">
       <div className="vld-grid-bg" aria-hidden="true" />
@@ -1011,9 +1023,9 @@ export const Demo = () => {
               >
                 Explore your dashboard <span aria-hidden="true">→</span>
               </Link>
-              <Link className="vld-back-link vld-state-back" to="/">
-                <ArrowLeft aria-hidden="true" /> Back to home
-              </Link>
+              <button className="vld-back-link vld-state-back" type="button" onClick={startAnotherDemo}>
+                <ArrowLeft aria-hidden="true" /> Start another demo
+              </button>
             </m.section>
           ) : null}
 
@@ -1050,6 +1062,9 @@ export const Demo = () => {
                   Need help with your export? <span>Book a walkthrough</span>
                 </a>
               ) : null}
+              <Link className="vld-back-link vld-state-back" to="/">
+                <ArrowLeft aria-hidden="true" /> Back to home
+              </Link>
             </m.section>
           ) : null}
         </AnimatePresence>

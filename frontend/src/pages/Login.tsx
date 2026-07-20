@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
@@ -89,7 +90,13 @@ export const Login = () => {
   }, [addDigit, deleteDigit]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-brand-background p-6">
+    <main className="relative flex min-h-screen items-center justify-center bg-brand-background px-6 pb-6 pt-20">
+      <Link
+        to="/"
+        className="absolute left-4 top-4 inline-flex min-h-11 items-center gap-2 rounded-md px-2 text-sm font-semibold text-brand-primary hover:text-brand-primaryHover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+      >
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to Splash Manager
+      </Link>
       <Card className={cn("w-full max-w-md border-brand-border bg-white shadow-xl", isShaking && "animate-pin-shake")}>
         <CardContent className="p-8 text-center">
           <img src={LOGO_URL} alt="Wedgewood Swim Club" className="mx-auto h-16 w-auto" />

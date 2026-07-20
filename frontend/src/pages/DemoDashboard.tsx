@@ -152,6 +152,9 @@ export const DemoDashboard = () => {
       <div className="vld-grid-bg" aria-hidden="true" />
       <main className="vld-dashboard-main">
         <SplashBrand />
+        <Link className="vld-back-link vld-dashboard-back" to="/demo">
+          <ArrowLeft aria-hidden="true" /> Back to demo setup
+        </Link>
 
         {state.status === "loading" ? (
           <section className="vld-overview-state" aria-live="polite">

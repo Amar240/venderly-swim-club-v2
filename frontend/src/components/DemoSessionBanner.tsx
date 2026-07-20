@@ -1,4 +1,4 @@
-import { ExternalLink, KeyRound } from "lucide-react";
+import { ArrowLeft, ExternalLink, KeyRound } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
@@ -35,8 +35,8 @@ export const DemoSessionBanner = () => {
               </div>
             </div>
           </details>
-          <Link className="font-semibold text-brand-primary hover:underline" to={`/demo/${staff.clubId}/dashboard`}>
-            Demo summary
+          <Link className="inline-flex min-h-11 items-center gap-1 font-semibold text-brand-primary hover:underline" to={`/demo/${staff.clubId}/dashboard`}>
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to demo summary
           </Link>
           <a className="inline-flex items-center gap-1 font-semibold text-brand-primary hover:underline" href={BOOKING_URL} target="_blank" rel="noopener noreferrer">
             Book a walkthrough <ExternalLink className="h-3.5 w-3.5" />
